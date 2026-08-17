@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lição 0006: Layouts, Errors e API Routes no FSD</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <header>
+    <div class="meta">Lição 0006 • Módulo 3: Framework Integration</div>
+    <h1>Layouts, error.tsx, loading.tsx e API Routes no FSD</h1>
+  </header>
+
+  <main>
+    <div class="callout">
+      <strong>🎯 Objetivo da Lição:</strong> Entender exatamente onde posicionar Layouts, Error Boundaries (<code>error.tsx</code>), Skeletons (<code>loading.tsx</code>) e API Routes (<code>route.ts</code>) mantendo a pasta <code>app/</code> do Next.js limpa.
+    </div>
+
+    <h2>1. Onde Fica Cada Arquivo Especial do App Router?</h2>
+
+    <div class="card">
+      <h3>🏛️ Layouts (layout.tsx)</h3>
+      <p>Root Layouts usam <code>src/app/providers</code>. Layouts com Sidebar/Header usam Widgets de <code>src/widgets/dashboard-layout</code>.</p>
+    </div>
+
+    <div class="card">
+      <h3>⚠️ Error Boundaries & Loading Skeletons</h3>
+      <p>Componentes reutilizáveis ficam em <code>src/shared/ui</code>. Tratamentos específicos de páginas re-exportam de <code>src/pages/{page-name}</code>.</p>
+    </div>
+
+    <div class="card">
+      <h3>🔌 API Routes (route.ts)</h3>
+      <p>Delegam a lógica de backend/BFF para funções puras dentro de <code>src/entities/{domain}/api/server.ts</code> ou <code>src/shared/api</code>.</p>
+    </div>
+
+    <h2>2. Exemplo Prático de Código</h2>
+    <pre><code>// app/(dashboard)/movies/[id]/error.tsx
+'use client';
+
+// O arquivo de erro do Next.js apenas re-exporta a UI da página FSD!
+export { MovieErrorState as default } from '@/pages/movie-detail';</code></pre>
+
+    <h2>3. Teste de Fixação</h2>
+
+    <div class="quiz-container">
+      <h3>Se você tem um layout com Sidebar e Navbar que envolve o Dashboard, onde deve ficar o componente visual dessa Sidebar?</h3>
+      
+      <button class="quiz-option" onclick="checkQuiz(0)">Na camada src/widgets/dashboard-layout ou src/widgets/sidebar.</button>
+      <button class="quiz-option" onclick="checkQuiz(1)">Diretamente inline dentro do arquivo app/(dashboard)/layout.tsx.</button>
+      <button class="quiz-option" onclick="checkQuiz(2)">Dentro da pasta src/shared/api para ser consumido via HTTP.</button>
+
+      <div id="quiz-feedback" class="quiz-feedback"></div>
+    </div>
+
+  </main>
+
+  <footer>
+    <p>💡 <strong>Dúvidas sobre esta lição?</strong> Pergunte no chat!</p>
+    <p><a href="../MISSION.md">Ver MISSION.md</a> • <a href="./0005-fsd-nextjs-app-router.html">Lição 0005 Anterior</a></p>
+  </footer>
+
+  <script>
+    function checkQuiz(index) {
+      const feedback = document.getElementById('quiz-feedback');
+      feedback.style.display = 'block';
+      if (index === 0) {
+        feedback.style.color = 'var(--success)';
+        feedback.innerText = '✨ Exato! Uma Sidebar com Navbar compartilhada é um clássico Widget de UI no FSD.';
+      } else {
+        feedback.style.color = 'var(--warning)';
+        feedback.innerText = '❌ Incorreto. A resposta certa é a primeira: fica em src/widgets/.';
+      }
+    }
+  </script>
+</body>
+</html>

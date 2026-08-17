@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lição 0004: TanStack Query & Query Key Factories no FSD</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <header>
+    <div class="meta">Lição 0004 • Módulo 2: Estado Assíncrono</div>
+    <h1>TanStack Query & Query Key Factories no FSD</h1>
+  </header>
+
+  <main>
+    <div class="callout">
+      <strong>🎯 Objetivo da Lição:</strong> Estruturar buscas de dados (Queries) e mutações (Mutations) no FSD usando <strong>Query Key Factories</strong> para eliminar <i>magic strings</i> e padronizar a invalidação de cache entre fatias.
+    </div>
+
+    <h2>1. O Padrão Query Key Factory</h2>
+    <p>
+      Em vez de passar arrays soltos como <code>['movies', filters]</code> espalhados pelo código, criamos um objeto centralizado dentro do <code>model/</code> da entidade:
+    </p>
+
+    <pre><code>// src/entities/movie/model/movieQueries.ts
+import { MovieFilters } from './types';
+import { fetchMovies, fetchMovieById } from '../api/movieApi';
+
+export const movieQueries = {
+  all: () => ['movies'] as const,
+  lists: () => [...movieQueries.all(), 'list'] as const,
+  list: (filters: MovieFilters) => [...movieQueries.lists(), filters] as const,
+  details: () => [...movieQueries.all(), 'detail'] as const,
+  detail: (id: number) => [...movieQueries.details(), id] as const,
+};</code></pre>
+
+    <h2>2. Custom Hook na Entidade (entities/movie)</h2>
+    <p>
+      O hook da entidade consome a fábrica de chaves e a função da API:
+    </p>
+
+    <pre><code>// src/entities/movie/model/useMoviesQuery.ts
+import { useQuery } from '@tanstack/react-query';
+import { movieQueries } from './movieQueries';
+import { MovieFilters } from './types';
+
+export function useMoviesQuery(filters: MovieFilters) {
+  return useQuery({
+    queryKey: movieQueries.list(filters),
+    queryFn: () => fetchMovies(filters),
+    staleTime: 1000 * 60 * 5, // 5 minutos de cache fresco
+  });
+}</code></pre>
+
+    <h2>3. Mutações e Invalidação de Cache na Feature (features/rate-movie)</h2>
+    <p>
+      Quando o usuário avalia um filme, a mutação na camada <code>features/</code> precisa atualizar a UI invalidando a query do filme:
+    </p>
+
+    <pre><code>// src/features/rate-movie/model/useRateMovieMutation.ts
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { movieQueries } from '@/entities/movie';
+import { rateMovieApi } from '../api/rateMovieApi';
+
+export function useRateMovieMutation(movieId: number) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (rating: number) => rateMovieApi(movieId, rating),
+    onSuccess: () => {
+      // Invalida especificamente o cache deste filme
+      queryClient.invalidateQueries({ queryKey: movieQueries.detail(movieId) });
+      // Ou invalida todas as listas de filmes se necessário
+      queryClient.invalidateQueries({ queryKey: movieQueries.lists() });
+    },
+  });
+}</code></pre>
+
+    <h2>4. Teste de Fixação</h2>
+
+    <div class="quiz-container">
+      <h3>Qual a grande vantagem de exportar movieQueries da Public API (index.ts) da entidade movie?</h3>
+      
+      <button class="quiz-option" onclick="checkQuiz(0)">Permite que qualquer feature invalide caches específicos sem precisar adivinhar a chave de cache.</button>
+      <button class="quiz-option" onclick="checkQuiz(1)">Faz com que o Next.js App Router renderize a página obrigatoriamente no lado do servidor.</button>
+      <button class="quiz-option" onclick="checkQuiz(2)">Evita que o Axios faça requisições duplicadas diretamente no banco de dados do cliente.</button>
+
+      <div id="quiz-feedback" class="quiz-feedback"></div>
+    </div>
+
+    <h2>5. Recursos Recomendados</h2>
+    <ul>
+      <li><a href="https://tkdodo.eu/blog/effective-react-query-keys" target="_blank">TkDodo's blog - Effective React Query Keys</a></li>
+      <li><a href="https://github.com/yurisldk/realworld-react-fsd/blob/main/src/entities/article/api/articleApi.ts" target="_blank">Exemplo no RealWorld React FSD (Article Queries)</a></li>
+    </ul>
+
+  </main>
+
+  <footer>
+    <p>💡 <strong>Dúvidas sobre esta lição?</strong> Faça sua pergunta diretamente no chat!</p>
+    <p><a href="../MISSION.md">Ver MISSION.md</a> • <a href="./0003-fsd-nested-types-and-dto-contracts.html">Lição 0003 Anterior</a></p>
+  </footer>
+
+  <script>
+    function checkQuiz(index) {
+      const feedback = document.getElementById('quiz-feedback');
+      feedback.style.display = 'block';
+      if (index === 0) {
+        feedback.style.color = 'var(--success)';
+        feedback.innerText = '✨ Perfeito! Qualquer feature (avaliar, favoritar, deletar) pode invalidar o cache de forma totalmente segura e padronizada.';
+      } else {
+        feedback.style.color = 'var(--warning)';
+        feedback.innerText = '❌ Incorreto. A opção correta é a primeira: padroniza a invalidação entre fatias.';
+      }
+    }
+  </script>
+</body>
+</html>

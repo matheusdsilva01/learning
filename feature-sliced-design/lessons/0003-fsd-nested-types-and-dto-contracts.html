@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lição 0003: Tipagem de Objetos Aninhados e DTOs no FSD</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <header>
+    <div class="meta">Lição 0003 • Módulo 1: TypeScript & DTOs</div>
+    <h1>Onde colocar os tipos de respostas aninhadas de APIs no FSD?</h1>
+  </header>
+
+  <main>
+    <div class="callout">
+      <strong>🎯 Objetivo da Lição:</strong> Entender onde alocar sub-objetos de APIs do mundo real (ex: <code>production_companies</code> dentro de um <code>Movie</code> do TMDB) sem quebrar o isolamento entre entidades no FSD.
+    </div>
+
+    <h2>1. O Cenário Real (Payloads de API com Objetos Aninhados)</h2>
+    <p>
+      APIs como a do TMDB devolvem dados complexos e aninhados na mesma requisição:
+    </p>
+    <pre><code>// GET /movie/11
+{
+  "id": 11,
+  "title": "Star Wars",
+  "genres": [{ "id": 12, "name": "Adventure" }],
+  "production_companies": [{ "id": 1, "name": "Lucasfilm Ltd.", "logo_path": "..." }]
+}</code></pre>
+
+    <h2>2. A Regra: Evite Importações Cruzadas de Tipos entre Entidades</h2>
+    <p>
+      Tentativa intuitiva mas problemática:
+    </p>
+    <pre><code>// ❌ EVITE: entities/movie importando de entities/company
+import { Company } from '@/entities/company'; 
+
+export interface Movie {
+  id: number;
+  production_companies: Company[]; 
+}</code></pre>
+
+    <div class="callout callout-warning">
+      <strong>Por que isso é um problema?</strong><br>
+      Fatias da mesma camada (<code>entities</code>) não devem importar umas das outras. Isso gera acoplamento oculto e pode disparar erros nos linters do FSD (como o <code>steiger</code>).
+    </div>
+
+    <h2>3. A Solução: Colocalizar o DTO em <code>entities/movie/model/types.ts</code></h2>
+    <p>
+      Defina os sub-tipos necessários para representar o contrato da API diretamente dentro do <code>model/types.ts</code> do filme:
+    </p>
+    <pre><code>// ✅ RECOMENDADO: src/entities/movie/model/types.ts
+
+export interface MovieProductionCompany {
+  id: number;
+  logo_path: string | null;
+  name: string;
+  origin_country: string;
+}
+
+export interface MovieGenre {
+  id: number;
+  name: string;
+}
+
+export interface Movie {
+  id: number;
+  title: string;
+  production_companies: MovieProductionCompany[];
+  genres: MovieGenre[];
+}</code></pre>
+
+    <h2>4. Teste de Fixação</h2>
+
+    <div class="quiz-container">
+      <h3>Qual é a principal razão para manter o tipo MovieProductionCompany em entities/movie/model/types.ts?</h3>
+      
+      <button class="quiz-option" onclick="checkQuiz(0)">Porque representa o contrato específico de resposta da API de filmes e evita cross-entity imports.</button>
+      <button class="quiz-option" onclick="checkQuiz(1)">Porque o TypeScript não permite importar interfaces de arquivos em outras pastas no React.</button>
+      <button class="quiz-option" onclick="checkQuiz(2)">Porque componentes do Next.js App Router só aceitam tipos declarados no mesmo diretório.</button>
+
+      <div id="quiz-feedback" class="quiz-feedback"></div>
+    </div>
+
+    <h2>5. Recursos Recomendados</h2>
+    <ul>
+      <li><a href="https://feature-sliced.github.io/documentation/concepts/cross-imports" target="_blank">FSD Docs - Cross-slice imports rule</a></li>
+    </ul>
+
+  </main>
+
+  <footer>
+    <p>💡 <strong>Dúvidas sobre esta lição?</strong> Pergunte no chat para aprofundarmos!</p>
+    <p><a href="../MISSION.md">Ver MISSION.md</a> • <a href="./0002-fsd-real-world-filters-and-entities.html">Lição 0002 Anterior</a></p>
+  </footer>
+
+  <script>
+    function checkQuiz(index) {
+      const feedback = document.getElementById('quiz-feedback');
+      feedback.style.display = 'block';
+      if (index === 0) {
+        feedback.style.color = 'var(--success)';
+        feedback.innerText = '✨ Exato! O tipo reflete o DTO do endpoint e preserva a independência das fatias.';
+      } else {
+        feedback.style.color = 'var(--warning)';
+        feedback.innerText = '❌ Incorreto. A primeira opção é a correta: evita a quebra de isolamento entre fatias.';
+      }
+    }
+  </script>
+</body>
+</html>

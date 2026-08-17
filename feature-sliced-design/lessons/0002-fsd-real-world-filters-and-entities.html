@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lição 0002: Composição de Múltiplas Entidades em Features (Filtros Reais)</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <header>
+    <div class="meta">Lição 0002 • Módulo 1: Aplicação Prática</div>
+    <h1>Desmistificando Filtros Reais: Como Combinar Múltiplas Entidades sem Acoplamento</h1>
+  </header>
+
+  <main>
+    <div class="callout">
+      <strong>🎯 Objetivo da Lição:</strong> Aprender a resolver o cenário comum de painéis de filtro (ex: Catálogo de Filmes com busca por Categoria, Produtora e Ano) sem jogar código de domínio no <code>shared/</code> e sem violar o fluxo de importações unidirecional do FSD.
+    </div>
+
+    <h2>1. O Dilema: Onde Colocar Selects Dinâmicos que Dependem de APIs?</h2>
+    <p>
+      Em um catálogo de filmes, precisamos filtrar por:
+    </p>
+    <ul>
+      <li><strong>Categoria</strong> (dados vindos de <code>/api/categories</code>)</li>
+      <li><strong>Empresa Produtora</strong> (dados vindos de <code>/api/companies</code>)</li>
+      <li><strong>Título e Ano</strong> (filtros locais de texto)</li>
+    </ul>
+    <p>
+      Um erro comum é colocar esses dados dentro de <code>shared/</code> ou colocar as chamadas de API de Categoria dentro de <code>entities/movie</code>. No FSD, nós mantemos o princípio de <strong>Entidades Independentes</strong> e <strong>Features Compositoras</strong>.
+    </p>
+
+    <h2>2. A Divisão de Responsabilidades no FSD</h2>
+
+    <div class="card">
+      <h3>1️⃣ Shared (shared/ui/select)</h3>
+      <p>Componente puro de UI (ex: <code>&lt;Select options={...} /&gt;</code>). Ele não sabe o que é um Filme, Categoria ou Empresa. Recebe apenas <code>label</code>, <code>options</code> e <code>onChange</code>.</p>
+    </div>
+
+    <div class="card">
+      <h3>2️⃣ Entities Independentes (entities/category e entities/company)</h3>
+      <p>Cada entidade possui seu próprio <code>model/</code> com o hook do TanStack Query (ex: <code>useCategoriesQuery</code>). Elas não se conhecem e não dependem dos filmes.</p>
+    </div>
+
+    <div class="card">
+      <h3>3️⃣ Feature Compositora (features/filter-movies)</h3>
+      <p>Importa o <code>&lt;Select /&gt;</code> do <code>shared</code>, consome os hooks de <code>entities/category</code> e <code>entities/company</code> e expõe o formulário/painel de filtros completo.</p>
+    </div>
+
+    <div class="card">
+      <h3>4️⃣ Widget do Catálogo (widgets/movie-catalog)</h3>
+      <p>Renders a <code>features/filter-movies</code> e passa os filtros ativos para a query de filmes em <code>entities/movie/model/useMoviesQuery(filters)</code>.</p>
+    </div>
+
+    <h2>3. O Fluxo de Dados (Diagrama FSD)</h2>
+
+    <div class="diagram">
+                  [ widgets/movie-catalog ]
+                       /            \
+                      v              v
+        [ features/filter-movies ]  [ entities/movie ] (useMoviesQuery)
+          /         |          \
+         v          v           v
+[ entities/category ] [ entities/company ] [ shared/ui/select ]
+(useCategoriesQuery)   (useCompaniesQuery)  (&lt;Select /&gt;)
+    </div>
+
+    <h2>4. Teste de Fixação</h2>
+
+    <div class="quiz-container">
+      <h3>Por que colocar o endpoint GET /api/categories dentro da pasta shared/ seria uma violação no FSD?</h3>
+      
+      <button class="quiz-option" onclick="checkQuiz(0)">Porque a camada shared deve ser agnóstica de domínio e categories é uma entidade de negócio.</button>
+      <button class="quiz-option" onclick="checkQuiz(1)">Porque o TanStack Query só pode ser utilizado dentro da camada pages do Next.js App Router.</button>
+      <button class="quiz-option" onclick="checkQuiz(2)">Porque o shared só pode conter estilos CSS e ícones SVG estáticos do projeto.</button>
+
+      <div id="quiz-feedback" class="quiz-feedback"></div>
+    </div>
+
+    <h2>5. Próximos Passos</h2>
+    <p>Agora que você entendeu o isolamento de entidades em filtros, na próxima lição vamos ver como estruturar o <strong>TanStack Query com Query Key Factories</strong> dentro de <code>entities/movie/model</code>!</p>
+
+  </main>
+
+  <footer>
+    <p>💡 <strong>Dúvidas sobre esta lição?</strong> Pergunte diretamente ao agente assistente no chat!</p>
+    <p><a href="../MISSION.md">Ver MISSION.md</a> • <a href="./0001-fsd-anatomy-entities-vs-features.html">Lição 0001 Anterior</a></p>
+  </footer>
+
+  <script>
+    function checkQuiz(index) {
+      const feedback = document.getElementById('quiz-feedback');
+      feedback.style.display = 'block';
+      if (index === 0) {
+        feedback.style.color = 'var(--success)';
+        feedback.innerText = '✨ Exato! shared só contém abstrações sem domínio (UI genérica, cliente HTTP, helpers).';
+      } else {
+        feedback.style.color = 'var(--warning)';
+        feedback.innerText = '❌ Incorreto. A resposta correta é a primeira: shared não pode conter conceitos do seu domínio de negócio.';
+      }
+    }
+  </script>
+</body>
+</html>

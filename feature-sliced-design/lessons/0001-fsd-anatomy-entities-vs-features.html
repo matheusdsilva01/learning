@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lição 0001: Anatomia do FSD - Entities vs Features</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <header>
+    <div class="meta">Lição 0001 • Módulo 1: Fundamentos</div>
+    <h1>Anatomia do FSD: Como Separar Entities de Features</h1>
+  </header>
+
+  <main>
+    <div class="callout">
+      <strong>🎯 Objetivo da Lição:</strong> Aprender a identificar com clareza o que pertence à camada <code>entities/</code> (modelo de negócio puro) e o que pertence à camada <code>features/</code> (ações do usuário com intenção comercial/fluxo), acabando com o acoplamento no Next.js.
+    </div>
+
+    <h2>1. O Problema da Organização por Domínio Tradicional</h2>
+    <p>
+      Quando organizávamos por pastas de domínio simples (ex: <code>/src/user</code> ou <code>/src/cart</code>), era muito comum que dentro da mesma pasta ficassem misturados:
+    </p>
+    <ul>
+      <li>O componente de visualização do avatar do usuário;</li>
+      <li>O formulário de edição de perfil;</li>
+      <li>As queries de busca de usuário;</li>
+      <li>As mutations de troca de senha.</li>
+    </ul>
+    <p>
+      Isso gerava <strong>baixo isolamento e alto acoplamento</strong>. No FSD, nós dividimos esse domínio em duas camadas hierárquicas com responsabilidades distintas.
+    </p>
+
+    <h2>2. A Regra de Ouro: Entity vs Feature</h2>
+
+    <div class="card">
+      <h3>🏛️ Entities (Entidades de Negócio)</h3>
+      <p>Representa <strong>substantivos</strong> do sistema. É o modelo de dados real, seus seletores, estilos visuais básicos (cards, badges) e as chamadas de busca de dados (<code>useQuery</code>).</p>
+      <p><em>Exemplos:</em> <code>user</code>, <code>product</code>, <code>order</code>, <code>category</code>.</p>
+      <p><strong>Regra:</strong> Uma Entity NUNCA sabe quem a está chamando ou qual ação está sendo executada com ela.</p>
+    </div>
+
+    <div class="card">
+      <h3>⚡ Features (Funcionalidades / Ações)</h3>
+      <p>Representa <strong>verbos e intenções</strong> do usuário que trazem valor prático ao negócio. Costuma conter formulários, botões de ação, modais e chamadas de alteração de estado (<code>useMutation</code>).</p>
+      <p><em>Exemplos:</em> <code>add-to-cart</code>, <code>login-by-email</code>, <code>filter-catalog</code>, <code>update-user-avatar</code>.</p>
+      <p><strong>Regra:</strong> Uma Feature PODE importar e utilizar Entities para renderizar seus formulários ou ações, mas NUNCA o contrário.</p>
+    </div>
+
+    <h2>3. Comparação Prática de Estrutura no Projeto</h2>
+    
+    <div class="diagram">
+src/
+├── entities/
+│   └── user/                  <-- ENTIDADE USER (Substantivo)
+│       ├── ui/
+│       │   └── UserAvatar.tsx <-- Apenas exibe o avatar e nome
+│       ├── model/
+│       │   ├── userQueries.ts <-- TanStack Query: useUserQuery()
+│       │   └── types.ts
+│       └── index.ts           <-- Public API (Encapsulamento)
+│
+└── features/
+    └── update-user-avatar/    <-- FEATURE (Verbo/Ação)
+        ├── ui/
+        │   └── AvatarUploadForm.tsx <-- Componente com botão e dropzone
+        ├── model/
+        │   └── useUpdateAvatarMutation.ts <-- TanStack Query: useMutation()
+        └── index.ts           <-- Public API
+    </div>
+
+    <div class="callout callout-warning">
+      <strong>⚠️ Regra da Public API (index.ts):</strong><br>
+      Um arquivo fora de <code>entities/user</code> só pode fazer:<br>
+      <code>import { UserAvatar } from "@/entities/user";</code><br>
+      É <strong>PROIBIDO</strong> fazer importações profundas como:<br>
+      <code>import { UserAvatar } from "@/entities/user/ui/UserAvatar";</code> (Vaza detalhes de implementação!).
+    </div>
+
+    <h2>4. Teste Seus Conhecimentos</h2>
+
+    <div class="quiz-container">
+      <h3>Onde você colocaria o hook <code>useProductDetails(id)</code> (TanStack Query)?</h3>
+      <p>Imagine que esse hook faz a busca via <code>useQuery</code> das informações brutas de um produto por ID.</p>
+      
+      <button class="quiz-option" onclick="checkQuiz(0)">Na camada entities/product/model pois é um modelo de dados puro.</button>
+      <button class="quiz-option" onclick="checkQuiz(1)">Na camada features/product-details/model pois é uma tela/função.</button>
+      <button class="quiz-option" onclick="checkQuiz(2)">Na camada shared/api pois é uma requisição HTTP para o servidor.</button>
+
+      <div id="quiz-feedback" class="quiz-feedback"></div>
+    </div>
+
+    <h2>5. Recursos Recomendados & Fontes Primárias</h2>
+    <ul>
+      <li><a href="https://feature-sliced.github.io/documentation/concepts/layers" target="_blank">FSD Docs - Concept: Layers</a></li>
+      <li>Estudo de caso real: <a href="https://github.com/yurisldk/realworld-react-fsd/tree/main/src/entities" target="_blank">Repositório RealWorld React FSD (Pasta Entities)</a></li>
+    </ul>
+
+  </main>
+
+  <footer>
+    <p>💡 <strong>Dúvidas sobre esta lição?</strong> Pergunte diretamente ao agente assistente no chat! Você pode pedir mais exemplos práticos ou esclarecer dúvidas de sintaxe.</p>
+    <p><a href="../MISSION.md">Ver MISSION.md</a> • <a href="../RESOURCES.md">Ver RESOURCES.md</a></p>
+  </footer>
+
+  <script>
+    function checkQuiz(index) {
+      const feedback = document.getElementById('quiz-feedback');
+      feedback.style.display = 'block';
+      if (index === 0) {
+        feedback.style.color = 'var(--success)';
+        feedback.innerText = '✨ Correto! Hooks de busca de modelo puro (useQuery) pertencem a entities/{domain}/model.';
+      } else {
+        feedback.style.color = 'var(--warning)';
+        feedback.innerText = '❌ Incorreto. Lembre-se: busca de dados puros de uma entidade pertencem à camada entities/{domain}/model.';
+      }
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,211 @@
+/* Shared CSS for FSD Masterclass Lessons */
+:root {
+  --bg: #fcfcfc;
+  --text: #1e293b;
+  --text-muted: #64748b;
+  --accent: #2563eb;
+  --accent-light: #eff6ff;
+  --border: #e2e8f0;
+  --code-bg: #0f172a;
+  --code-text: #f8fafc;
+  --card-bg: #ffffff;
+  --success: #16a34a;
+  --warning: #d97706;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0b0f19;
+    --text: #f1f5f9;
+    --text-muted: #94a3b8;
+    --accent: #3b82f6;
+    --accent-light: #1e293b;
+    --border: #1e293b;
+    --code-bg: #020617;
+    --code-text: #f1f5f9;
+    --card-bg: #111827;
+  }
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  line-height: 1.6;
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem;
+}
+
+header {
+  border-bottom: 2px solid var(--border);
+  padding-bottom: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+header .meta {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+h1 {
+  font-size: 2.25rem;
+  font-weight: 800;
+  line-height: 1.25;
+  color: var(--text);
+}
+
+h2 {
+  font-size: 1.5rem;
+  margin-top: 2rem;
+  margin-bottom: 1rem;
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.4rem;
+}
+
+h3 {
+  font-size: 1.2rem;
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+}
+
+p {
+  margin-bottom: 1.25rem;
+  font-size: 1.05rem;
+}
+
+ul, ol {
+  margin-bottom: 1.25rem;
+  padding-left: 1.5rem;
+}
+
+li {
+  margin-bottom: 0.5rem;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+code {
+  font-family: var(--font-mono);
+  background-color: var(--accent-light);
+  color: var(--accent);
+  padding: 0.2rem 0.4rem;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+
+pre {
+  background-color: var(--code-bg);
+  color: var(--code-text);
+  font-family: var(--font-mono);
+  padding: 1.25rem;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin-bottom: 1.5rem;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+pre code {
+  background: transparent;
+  color: inherit;
+  padding: 0;
+}
+
+.diagram {
+  background-color: var(--code-bg);
+  color: #38bdf8;
+  font-family: var(--font-mono);
+  padding: 1.25rem;
+  border-radius: 8px;
+  white-space: pre;
+  overflow-x: auto;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  margin-bottom: 1.5rem;
+}
+
+.card {
+  background-color: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.callout {
+  border-left: 4px solid var(--accent);
+  background-color: var(--accent-light);
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.5rem;
+  border-radius: 0 8px 8px 0;
+}
+
+.callout-warning {
+  border-left-color: var(--warning);
+  background-color: rgba(217, 119, 6, 0.1);
+}
+
+.quiz-container {
+  background-color: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin-top: 2rem;
+  margin-bottom: 2rem;
+}
+
+.quiz-option {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.5rem;
+  background-color: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 1rem;
+  color: var(--text);
+  transition: all 0.2s ease;
+}
+
+.quiz-option:hover {
+  border-color: var(--accent);
+  background-color: var(--accent-light);
+}
+
+.quiz-feedback {
+  margin-top: 1rem;
+  font-weight: 600;
+  display: none;
+}
+
+footer {
+  margin-top: 3rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}

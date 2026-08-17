@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lição 0005: Next.js App Router com FSD (Roteamento Fino)</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <header>
+    <div class="meta">Lição 0005 • Módulo 3: Framework Integration</div>
+    <h1>Next.js App Router com FSD (Roteamento Fino)</h1>
+  </header>
+
+  <main>
+    <div class="callout">
+      <strong>🎯 Objetivo da Lição:</strong> Aprender a organizar projetos Next.js App Router mantendo a pasta <code>app/</code> apenas como um roteador "fino" e transferindo a composição da aplicação para <code>src/pages/</code> no FSD.
+    </div>
+
+    <h2>1. O Conceito de Thin Router (Roteador Fino)</h2>
+    <p>
+      Em vez de colocar lógica de negócios, chamadas de dados ou componentes diretamente no arquivo <code>page.tsx</code> da pasta <code>app/</code>, mantemos o <code>page.tsx</code> com pouquíssimas linhas de código.
+    </p>
+
+    <h2>2. Comparação de Código no Next.js App Router</h2>
+
+    <div class="card">
+      <h3>❌ Sem FSD (page.tsx virando Monólito)</h3>
+      <pre><code>// app/movies/[id]/page.tsx
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { Header } from '@/components/Header';
+import { RatingStars } from '@/components/RatingStars';
+
+export default function MoviePage({ params }) {
+  // 50 linhas de hooks, chamadas de dados e formulários misturados aqui...
+  return &lt;div&gt;...&lt;/div&gt;;
+}</code></pre>
+    </div>
+
+    <div class="card">
+      <h3>✅ Com FSD (page.tsx como Rota Fina)</h3>
+      <pre><code>// app/movies/[id]/page.tsx
+import { MovieDetailPage } from '@/pages/movie-detail';
+
+export default function Page({ params }: { params: { id: string } }) {
+  return &lt;MovieDetailPage movieId={Number(params.id)} /&gt;;
+}</code></pre>
+    </div>
+
+    <h2>3. Onde fica a camada de Páginas no FSD?</h2>
+    <p>
+      Toda a composição da tela vive dentro de <code>src/pages/movie-detail</code>:
+    </p>
+    <pre><code>// src/pages/movie-detail/ui/MovieDetailPage.tsx
+'use client';
+
+import { Header } from '@/widgets/header';
+import { MovieHero } from '@/widgets/movie-hero';
+import { MovieReviewsList } from '@/widgets/movie-reviews';
+import { RateMovieButton } from '@/features/rate-movie';
+
+export function MovieDetailPage({ movieId }: { movieId: number }) {
+  return (
+    &lt;main&gt;
+      &lt;Header /&gt;
+      &lt;MovieHero movieId={movieId} action={&lt;RateMovieButton movieId={movieId} /&gt;} /&gt;
+      &lt;MovieReviewsList movieId={movieId} /&gt;
+    &lt;/main&gt;
+  );
+}</code></pre>
+
+    <h2>4. Teste de Fixação</h2>
+
+    <div class="quiz-container">
+      <h3>Qual é a principal responsabilidade do arquivo app/movies/[id]/page.tsx no FSD?</h3>
+      
+      <button class="quiz-option" onclick="checkQuiz(0)">Apenas capturar os parâmetros da rota e delegar a renderização para a camada src/pages/.</button>
+      <button class="quiz-option" onclick="checkQuiz(1)">Executar a busca do banco de dados e instanciar todos os componentes visuais diretamente.</button>
+      <button class="quiz-option" onclick="checkQuiz(2)">Armazenar os estados globais do TanStack Query e gerenciar o cache do Axios.</button>
+
+      <div id="quiz-feedback" class="quiz-feedback"></div>
+    </div>
+
+    <h2>5. Recursos Recomendados</h2>
+    <ul>
+      <li><a href="https://feature-sliced.github.io/documentation/guides/tech/nextjs" target="_blank">FSD Official Guide - Integration with Next.js</a></li>
+    </ul>
+
+  </main>
+
+  <footer>
+    <p>💡 <strong>Dúvidas sobre esta lição?</strong> Envie sua pergunta diretamente aqui no chat!</p>
+    <p><a href="../MISSION.md">Ver MISSION.md</a> • <a href="./0004-fsd-tanstack-query-factories.html">Lição 0004 Anterior</a></p>
+  </footer>
+
+  <script>
+    function checkQuiz(index) {
+      const feedback = document.getElementById('quiz-feedback');
+      feedback.style.display = 'block';
+      if (index === 0) {
+        feedback.style.color = 'var(--success)';
+        feedback.innerText = '✨ Exato! A pasta app/ atua apenas como Roteador Fino (Thin Router).';
+      } else {
+        feedback.style.color = 'var(--warning)';
+        feedback.innerText = '❌ Incorreto. A primeira alternativa é a correta: apenas encaminha a rota para src/pages/.';
+      }
+    }
+  </script>
+</body>
+</html>

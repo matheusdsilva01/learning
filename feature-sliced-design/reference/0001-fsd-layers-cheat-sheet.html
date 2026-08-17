@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FSD Quick Reference & Cheat Sheet</title>
+  <link rel="stylesheet" href="../assets/style.css">
+  <style>
+    @media print {
+      body { max-width: 100%; padding: 0; }
+      .no-print { display: none; }
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 1.5rem;
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 0.75rem;
+      text-align: left;
+    }
+    th {
+      background-color: var(--accent-light);
+      color: var(--accent);
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="meta">Guia de Referência Rápida • FSD Cheat Sheet</div>
+    <h1>Feature-Sliced Design: Camadas, Segmentos e Regras</h1>
+  </header>
+
+  <main>
+    <h2>1. Resumo das 7 Camadas (Layers)</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Camada</th>
+          <th>Propósito</th>
+          <th>Pode Importar De</th>
+          <th>Exemplo de Conteúdo</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>app</code></td>
+          <td>Inicialização, providers, estilos globais, rotas finas do Next.js</td>
+          <td>Todas abaixo</td>
+          <td><code>app/providers.tsx</code>, <code>app/(dashboard)/page.tsx</code></td>
+        </tr>
+        <tr>
+          <td><code>processes</code></td>
+          <td>(Opcional/Legacy) Fluxos complexos entre múltiplas páginas</td>
+          <td>pages, widgets, features, entities, shared</td>
+          <td><code>checkout-flow</code></td>
+        </tr>
+        <tr>
+          <td><code>pages</code></td>
+          <td>Composição de telas completas para as rotas</td>
+          <td>widgets, features, entities, shared</td>
+          <td><code>src/pages/profile/ui/ProfilePage.tsx</code></td>
+        </tr>
+        <tr>
+          <td><code>widgets</code></td>
+          <td>Blocos de UI autônomos e compostos</td>
+          <td>features, entities, shared</td>
+          <td><code>Header</code>, <code>Sidebar</code>, <code>ProductGrid</code></td>
+        </tr>
+        <tr>
+          <td><code>features</code></td>
+          <td>Ações de usuário com valor de negócio (formulários, botões interativos)</td>
+          <td>entities, shared</td>
+          <td><code>add-to-cart</code>, <code>login-by-email</code></td>
+        </tr>
+        <tr>
+          <td><code>entities</code></td>
+          <td>Modelos de domínio de negócio (substantivos)</td>
+          <td>shared</td>
+          <td><code>user</code>, <code>product</code>, <code>order</code></td>
+        </tr>
+        <tr>
+          <td><code>shared</code></td>
+          <td>Código independente de domínio (UI Kit, cliente HTTP, helpers)</td>
+          <td>Nenhuma (Apenas libs externas)</td>
+          <td><code>shared/ui/button</code>, <code>shared/api/fetcher</code></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>2. Os 5 Segmentos Padrão (Segments)</h2>
+    <ul>
+      <li><code>ui/</code>: Componentes de interface visual (JSX/TSX).</li>
+      <li><code>model/</code>: Estado, custom hooks, TanStack Query keys/queries/mutations, schemas Zod, types TypeScript.</li>
+      <li><code>api/</code>: Requisições de rede puras (fetchers/Axios).</li>
+      <li><code>lib/</code>: Funções utilitárias e helpers específicos daquela fatia.</li>
+      <li><code>config/</code>: Constantes e configurações locais da fatia.</li>
+    </ul>
+
+    <h2>3. Regra Fundamental da Public API (Encapsulamento)</h2>
+    <pre><code>// ❌ ERRADO (Importação profunda ilegal):
+import { UserAvatar } from "@/entities/user/ui/UserAvatar";
+
+// ✅ CORRETO (Importação pela Public API index.ts):
+import { UserAvatar } from "@/entities/user";</code></pre>
+  </main>
+
+  <footer>
+    <p>Documento de Referência Rápida Rótulo FSD • Pode ser impresso ou visualizado offline.</p>
+  </footer>
+</body>
+</html>

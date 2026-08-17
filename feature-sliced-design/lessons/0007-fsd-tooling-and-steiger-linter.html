@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lição 0007: Tooling e Linting Automático com Steiger</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <header>
+    <div class="meta">Lição 0007 • Módulo 4: Tooling & Conclusão</div>
+    <h1>Tooling e Linting Automático (Steiger & ESLint) no FSD</h1>
+  </header>
+
+  <main>
+    <div class="callout">
+      <strong>🎯 Objetivo da Lição:</strong> Aprender a configurar o <strong>Steiger</strong> e o <strong>ESLint</strong> no seu projeto Next.js/React para travar automaticamente importações ilegais e proteger a arquitetura FSD em CI/CD.
+    </div>
+
+    <h2>1. O que é o Steiger?</h2>
+    <p>
+      O <strong>Steiger</strong> é o linter oficial mantido pela equipe do FSD. Ele inspeciona a estrutura das suas fatias, verifica se a API Pública (<code>index.ts</code>) está presente e impede que camadas inferiores importem de camadas superiores.
+    </p>
+
+    <h2>2. Como Instalar e Rodar o Steiger</h2>
+
+    <div class="card">
+      <h3>Comando no Terminal</h3>
+      <pre><code># Rodar diretamente via npx na pasta de código fonte:
+npx steiger ./src</code></pre>
+    </div>
+
+    <div class="card">
+      <h3>Configuração no package.json</h3>
+      <pre><code>{
+  "scripts": {
+    "lint:arch": "steiger ./src",
+    "lint": "next lint && npm run lint:arch"
+  }
+}</code></pre>
+    </div>
+
+    <h2>3. Regras Validadas Automaticamente pelo Steiger</h2>
+    <ul>
+      <li><strong>insignificant-slice-nesting:</strong> Impede aninhamento desnecessário e profundo de fatias.</li>
+      <li><strong>public-api-imports:</strong> Garante que imports passem pela Public API (<code>index.ts</code>).</li>
+      <li><strong>layer-imports:</strong> Bloqueia importações que violam a hierarquia (ex: <code>shared</code> importando de <code>entities</code>).</li>
+    </ul>
+
+    <h2>4. Teste de Conclusão do Curso</h2>
+
+    <div class="quiz-container">
+      <h3>Qual é a principal função do Steiger em um projeto com Feature-Sliced Design?</h3>
+      
+      <button class="quiz-option" onclick="checkQuiz(0)">Validar automaticamente no terminal/CI a estrutura de pastas e as regras de importação do FSD.</button>
+      <button class="quiz-option" onclick="checkQuiz(1)">Formatar o código CSS e minificar as imagens PNG da pasta public do Next.js.</button>
+      <button class="quiz-option" onclick="checkQuiz(2)">Gerar tipos TypeScript automaticamente a partir de um servidor PostgreSQL.</button>
+
+      <div id="quiz-feedback" class="quiz-feedback"></div>
+    </div>
+
+    <h2>5. Fontes e Repositórios Reais de Estudo</h2>
+    <ul>
+      <li><a href="https://github.com/feature-sliced/steiger" target="_blank">Steiger GitHub Repository</a></li>
+      <li><a href="https://github.com/yurisldk/realworld-react-fsd" target="_blank">RealWorld React FSD (Repositório Completo)</a></li>
+    </ul>
+
+  </main>
+
+  <footer>
+    <p>🎓 <strong>Parabéns! Você concluiu a trilha de aprendizado sobre FSD!</strong></p>
+    <p><a href="../MISSION.md">Ver MISSION.md Finalizado</a> • <a href="./0001-fsd-anatomy-entities-vs-features.html">Voltar à Lição 0001</a></p>
+  </footer>
+
+  <script>
+    function checkQuiz(index) {
+      const feedback = document.getElementById('quiz-feedback');
+      feedback.style.display = 'block';
+      if (index === 0) {
+        feedback.style.color = 'var(--success)';
+        feedback.innerText = '✨ Perfeito! O Steiger garante que a arquitetura seja respeitada sem depender da memória dos devs.';
+      } else {
+        feedback.style.color = 'var(--warning)';
+        feedback.innerText = '❌ Incorreto. A primeira opção é a correta: o Steiger é o linter de arquitetura do FSD.';
+      }
+    }
+  </script>
+</body>
+</html>
