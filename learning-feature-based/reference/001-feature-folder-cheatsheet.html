@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cheat Sheet: Arquitetura Feature-Folder</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+  <style>
+    .tree-box {
+      font-family: var(--font-mono);
+      background: var(--bg-surface);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-md);
+      padding: 1.25rem;
+      margin: 1rem 0;
+      white-space: pre;
+      line-height: 1.45;
+      font-size: 0.85rem;
+    }
+    .rule-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1rem 0 1.5rem;
+      font-size: 0.9rem;
+    }
+    .rule-table th, .rule-table td {
+      border: 1px solid var(--border-subtle);
+      padding: 0.75rem 1rem;
+      text-align: left;
+    }
+    .rule-table th {
+      background: var(--bg-elevated);
+      font-weight: 700;
+    }
+    .rule-table tr:nth-child(even) {
+      background: var(--bg-surface);
+    }
+    .badge-allow {
+      color: var(--success);
+      font-weight: 700;
+      background: var(--success-bg);
+      padding: 0.2rem 0.5rem;
+      border-radius: 4px;
+    }
+    .badge-deny {
+      color: var(--danger);
+      font-weight: 700;
+      background: var(--danger-bg);
+      padding: 0.2rem 0.5rem;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="doc-nav">
+      <span>📚 <strong>Guia de Referência Rápida</strong></span>
+      <a href="../lessons/0001-anatomia-e-decomposicao.html">Ir para Lição 0001 →</a>
+    </div>
+
+    <header class="doc-header">
+      <div class="doc-badge">Cheat Sheet #001</div>
+      <h1 class="doc-title">Arquitetura Feature-Folder: Guia Canônico</h1>
+      <p class="doc-subtitle">Regras de decisão, limites de importação, anatomia interna e anti-padrões.</p>
+    </header>
+
+    <h2>1. Árvore de Decisão: "Onde devo salvar este arquivo?"</h2>
+    <div class="tree-box">
+❓ Você está criando um novo arquivo (componente, hook, tipo, api)?
+ │
+ ├──► Este código é exclusivo de uma regra de negócio específica?
+ │     │
+ │     ├── SIM ──► Salve dentro de `src/features/<nome-da-feature>/`
+ │     │            ├── Chamadas de API / Queries  ──► `api/`
+ │     │            ├── Componentes visuais        ──► `components/`
+ │     │            ├── Hooks de estado local      ──► `hooks/`
+ │     │            ├── Store (Zustand/Context)    ──► `stores/`
+ │     │            └── Contratos TypeScript       ──► `types/`
+ │     │
+ │     └── NÃO ──► Mais de 2 features distintas utilizam esse código?
+ │                  │
+ │                  ├── SIM ──► É um componente genérico de UI (botão, input, modal)?
+ │                  │            ├── SIM ──► `src/components/` ou `src/shared/ui/`
+ │                  │            └── NÃO ──► É utilitário / cliente HTTP?
+ │                  │                         ├── SIM ──► `src/lib/` ou `src/shared/utils/`
+ │                  │                         └── NÃO (É entidade de domínio) ──► `src/entities/`
+ │                  │
+ │                  └── NÃO ──► Se apenas 1 feature o utiliza hoje, MANTENHA na feature!
+    </div>
+
+    <h2>2. Anatomia Canônica de uma Feature</h2>
+    <div class="tree-box">
+src/features/cart/
+├── api/                       # Queries e Mutations (TanStack Query), fetchers
+│   ├── get-cart.ts
+│   └── add-to-cart.ts
+├── components/                # Componentes privados da feature
+│   ├── cart-drawer.tsx
+│   ├── cart-item.tsx
+│   └── cart-summary.tsx
+├── hooks/                     # Custom hooks internos de comportamento
+│   └── use-cart-drawer.ts
+├── stores/                    # Estado da feature (Zustand slice ou Context)
+│   └── cart-store.ts
+├── types/                     # Tipagens TypeScript internas
+│   └── index.ts
+└── index.ts                   # ⚠️ PUBLIC API ÚNICA (Barreira de Encapsulamento)
+    </div>
+
+    <h2>3. Matriz de Permissão de Imports</h2>
+    <table class="rule-table">
+      <thead>
+        <tr>
+          <th>Origem (Quem importa)</th>
+          <th>Destino (O que está sendo importado)</th>
+          <th>Status</th>
+          <th>Justificativa Arquitetural</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>src/app/</code> ou <code>src/pages/</code></td>
+          <td><code>@features/cart</code> (via <code>index.ts</code>)</td>
+          <td><span class="badge-allow">PERMITIDO</span></td>
+          <td>Thin routes apenas montam e orquestram features públicas.</td>
+        </tr>
+        <tr>
+          <td><code>src/features/checkout/</code></td>
+          <td><code>@features/cart</code> (via <code>index.ts</code>)</td>
+          <td><span class="badge-allow">PERMITIDO</span></td>
+          <td>Consumo de API pública explícita entre features.</td>
+        </tr>
+        <tr>
+          <td><code>src/features/checkout/</code></td>
+          <td><code>@features/cart/components/cart-item</code></td>
+          <td><span class="badge-deny">PROIBIDO</span></td>
+          <td>Deep import quebra o encapsulamento interno da feature.</td>
+        </tr>
+        <tr>
+          <td><code>src/features/*</code></td>
+          <td><code>@shared/*</code> ou <code>@components/*</code></td>
+          <td><span class="badge-allow">PERMITIDO</span></td>
+          <td>Features podem consumir livremente a camada base compartilhada.</td>
+        </tr>
+        <tr>
+          <td><code>src/shared/*</code></td>
+          <td><code>@features/*</code></td>
+          <td><span class="badge-deny">PROIBIDO</span></td>
+          <td>Inversão de dependência: a base compartilhada nunca conhece features.</td>
+        </tr>
+        <tr>
+          <td><code>src/features/cart/</code></td>
+          <td><code>src/features/cart/components/*</code></td>
+          <td><span class="badge-allow">PERMITIDO</span></td>
+          <td>Imports relativos internos dentro da mesma feature são livres.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>4. Como Definir uma Feature (Os 3 Testes Ácidos)</h2>
+    <table class="rule-table">
+      <thead>
+        <tr>
+          <th>Teste</th>
+          <th>Pergunta Prática</th>
+          <th>Critério de Aprovação</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>1. Teste da Deleção</strong></td>
+          <td>"Se eu apagar a pasta da feature, o restante do app compila sem erros ocultos?"</td>
+          <td><span class="badge-allow">SIM</span> → É uma Feature. Zero código órfão deixado para trás.</td>
+        </tr>
+        <tr>
+          <td><strong>2. Teste do Verbo</strong></td>
+          <td>"Representa uma capacidade/ação funcional de negócio do usuário?"</td>
+          <td><span class="badge-allow">SIM</span> → Ação = Feature (`cart`, `checkout`). Substantivo puro = Entity (`Product`, `User`).</td>
+        </tr>
+        <tr>
+          <td><strong>3. Teste da Regra Própria</strong></td>
+          <td>"Possui chamadas de API, validações e mutations exclusivas desse fluxo?"</td>
+          <td><span class="badge-allow">SIM</span> → Feature (`src/features/*`). Se for UI sem regra de negócio → `src/shared/ui/`.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout tip">
+      <div class="callout-title">A Regra da Evolução em Duas Fases (Exemplo do Cupom)</div>
+      <p><strong>Fase 1 (Simplicidade)</strong>: O cupom é apenas um input no carrinho que faz <code>POST /api/cart/coupon</code>. Ele vive 100% dentro de <code>src/features/cart/</code>. As validações de negócio pertencem 100% ao backend.<br>
+      <strong>Fase 2 (Promoção a Domínio)</strong>: Se o negócio criar tela de Carteira no Perfil e Checkout 1-Clique, o cupom é promovido para <code>src/features/coupons/</code> e exporta <code>CouponWallet</code>, <code>CouponInput</code> e <code>CouponSelector</code>.</p>
+    </div>
+
+    <h2>5. Como Evitar o "Código Kamehameha" (Slot Hell no JSX)</h2>
+    <div class="callout warning">
+      <div class="callout-title">O Perigo da Super-Composição</div>
+      <p>Passar dezenas de slots aninhados na <code>page.tsx</code> gera uma pirâmide profunda de indentação (<code>&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;</code>).</p>
+    </div>
+    <div class="tree-box">
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 4 ESTRATÉGIAS PARA ELIMINAR O KAMEHAMEHA:                                  │
+│                                                                             │
+│ 1. Compound Components ──► &lt;Card&gt;&lt;Card.Actions&gt;&lt;Button /&gt;&lt;/Card.Actions&gt;&lt;/Card&gt; │
+│ 2. Widgets / Composers ──► Criar blocos intermediários (&lt;CatalogProductGrid /&gt;)│
+│ 3. Context Local       ──► Prover contexto no card; filho consome via hook │
+│ 4. Regra de 1 Nível    ──► Máximo de 1 nível de injeção de slot por bloco   │
+└─────────────────────────────────────────────────────────────────────────────┘</div>
+
+    <h2>6. O Teste da Deleção e o Blast Radius (Raio de Explosão)</h2>
+    <p>O teste de deleção não é sobre "apagar e nada quebrar como mágica", mas sim ter <strong>previsibilidade total do que vai quebrar</strong>:</p>
+    <div class="callout success">
+      <div class="callout-title">Garantias do Blast Radius em Feature-Folders</div>
+      <p>1. <strong>Zero Código Órfão</strong>: 100% dos hooks, componentes, testes e queries morrem juntos na pasta.<br>
+      2. <strong>Erros Finos e Previsíveis</strong>: O TypeScript acusa erro apenas nas 1 ou 2 linhas onde a Public API foi consumida.<br>
+      3. <strong>Limpeza em 1 Minuto</strong>: Você apaga as linhas apontadas pelo compilador e a base está limpa.</p>
+    </div>
+
+    <h2>7. Migração de Legados: Padrão Strangler Fig (Estrangulamento)</h2>
+    <div class="callout tip">
+      <div class="callout-title">Como migrar sem parar o time</div>
+      <p>1. <strong>Novas Features</strong>: Toda feature nova já nasce obrigatoriamente em <code>src/features/&lt;nome&gt;/</code>.<br>
+      2. <strong>Regra do Escoteiro</strong>: Só migre código legado de <code>src/components/</code> quando precisar alterar a regra de negócio dele.<br>
+      3. <strong>Esvaziamento Natural</strong>: Com o tempo, a pasta legada esvazia e sobram apenas primitivos puros de UI.</p>
+    </div>
+
+    <h2>8. Guia Rápido de Nomenclatura: Auth, User, Dashboard & Settings</h2>
+    <table class="rule-table">
+      <thead>
+        <tr>
+          <th>Nome Proposto</th>
+          <th>Classificação</th>
+          <th>Onde Deve Ficar</th>
+          <th>Racional</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong><code>Auth</code></strong></td>
+          <td><span class="badge-allow">FEATURE</span></td>
+          <td><code>src/features/auth/</code></td>
+          <td>Domínio fechado (login, cadastro, recuperação, sessão).</td>
+        </tr>
+        <tr>
+          <td><strong><code>User</code></strong></td>
+          <td><span class="badge-allow">ENTITY / FEATURE</span></td>
+          <td><code>entities/user</code> ou <code>features/profile</code></td>
+          <td>Dados transversais/avatar = Entity. Edição de dados do usuário = Feature (`profile`). Gestão de membros = `user-management`.</td>
+        </tr>
+        <tr>
+          <td><strong><code>Dashboard</code></strong></td>
+          <td><span class="badge-deny">ROTA / PÁGINA</span></td>
+          <td><code>src/app/(dashboard)/page.tsx</code></td>
+          <td>Dashboard é uma tela orquestradora que compõe widgets de múltiplas features. Não é um domínio isolado.</td>
+        </tr>
+        <tr>
+          <td><strong><code>Settings</code></strong></td>
+          <td><span class="badge-allow">ROTAS AGREGADORAS</span></td>
+          <td><code>src/app/settings/*/page.tsx</code></td>
+          <td>Dividir em sub-rotas consumindo suas respectivas features (`settings/billing` consome `features/billing`).</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <footer class="doc-footer">
+      <span>Antigravity Engineering Protocol • Feature-Folder Architecture</span>
+      <a href="../lessons/0001-anatomia-e-decomposicao.html">Voltar para Lições →</a>
+    </footer>
+  </div>
+</body>
+</html>

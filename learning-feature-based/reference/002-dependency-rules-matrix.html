@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Matriz de Regras de Dependência & Comunicação Inter-Feature</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+  <style>
+    .ascii-box {
+      font-family: var(--font-mono);
+      background: var(--bg-code);
+      color: #38bdf8;
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-md);
+      padding: 1.25rem;
+      margin: 1.25rem 0;
+      white-space: pre;
+      line-height: 1.45;
+      font-size: 0.83rem;
+      overflow-x: auto;
+    }
+    .code-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin: 1.25rem 0;
+    }
+    @media (max-width: 820px) {
+      .code-grid { grid-template-columns: 1fr; }
+    }
+    .code-panel {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 1rem;
+    }
+    .code-panel h4 {
+      font-size: 0.9rem;
+      margin-bottom: 0.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .code-panel.bad { border-top: 3px solid var(--danger); }
+    .code-panel.good { border-top: 3px solid var(--success); }
+    .code-panel.bad h4 { color: var(--danger); }
+    .code-panel.good h4 { color: var(--success); }
+    .matrix-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1.25rem 0;
+      font-size: 0.88rem;
+    }
+    .matrix-table th, .matrix-table td {
+      border: 1px solid var(--border-subtle);
+      padding: 0.75rem;
+      text-align: left;
+    }
+    .matrix-table th {
+      background: var(--bg-elevated);
+      font-weight: 700;
+    }
+    .matrix-table tr:nth-child(even) {
+      background: var(--bg-surface);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="doc-nav">
+      <a href="../reference/001-feature-folder-cheatsheet.html">← Cheat Sheet #001</a>
+      <a href="../lessons/0002-encapsulamento-public-api-e-rotas.html">Ir para Lição 0002 →</a>
+    </div>
+
+    <header class="doc-header">
+      <div class="doc-badge">Referência Técnica #002</div>
+      <h1 class="doc-title">Matriz de Dependências & Comunicação Inter-Feature</h1>
+      <p class="doc-subtitle">Grafo Acíclico (DAG), Inversão de Controle, Composição por Slots e Padrão Thin Routes.</p>
+    </header>
+
+    <h2>1. Grafo Acíclico Direcionado (DAG) de Dependências</h2>
+    <p>Em uma arquitetura de frontend escalável, as dependências devem fluir estritamente de cima para baixo. Nenhuma dependência circular ou horizontal cruzada profunda é permitida:</p>
+
+    <div class="ascii-box">
+ ┌─────────────────────────────────────────────────────────────────────────────┐
+ │                           CAMADA 1: APP & ROTAS                             │
+ │           (Next.js app/**/page.tsx, layout.tsx, router controllers)         │
+ └──────────────────────────────────────┬──────────────────────────────────────┘
+                                        │ (1) Orquestra e injeta slots
+                                        ▼
+ ┌─────────────────────────────────────────────────────────────────────────────┐
+ │                        CAMADA 2: FEATURES (MODULARES)                       │
+ │                                                                             │
+ │   ┌───────────────────────┐                    ┌────────────────────────┐   │
+ │   │  src/features/catalog │                    │   src/features/cart    │   │
+ │   │  (Cards, Filtros,     │                    │   (Drawer, Items,      │   │
+ │   │   useProducts)        │                    │    useCartSummary)     │   │
+ │   └───────────┬───────────┘                    └───────────┬────────────┘   │
+ │               │                                            │                │
+ │               │ (X) PROIBIDO: Dependência direta           │                │
+ │               │     entre features com regras cruzadas     │                │
+ │               └──────────────────────(X)───────────────────┘                │
+ └──────────────────────────────────────┬──────────────────────────────────────┘
+                                        │ (2) Consomem modelos e utilitários
+                                        ▼
+ ┌─────────────────────────────────────────────────────────────────────────────┐
+ │                      CAMADA 3: DOMÍNIO TRANSVERSAL (ENTITIES)               │
+ │           src/entities/product, src/entities/user, src/entities/cart        │
+ │              (Modelos TypeScript puros, Schemas Zod, Parsers)               │
+ └──────────────────────────────────────┬──────────────────────────────────────┘
+                                        │ (3) Consomem infraestrutura pura
+                                        ▼
+ ┌─────────────────────────────────────────────────────────────────────────────┐
+ │                   CAMADA 4: SHARED / CORE / DESIGN SYSTEM                   │
+ │           src/shared/ui (Button, Modal), src/shared/lib (HttpClient)        │
+ └─────────────────────────────────────────────────────────────────────────────┘</div>
+
+    <h2>2. Os 4 Padrões de Comunicação Inter-Feature</h2>
+
+    <h3>Padrão 1: Inversão de Controle com Slots (Slot Pattern)</h3>
+    <p><strong>Cenário:</strong> O cartão de produto (<code>catalog</code>) precisa exibir um botão "Adicionar ao Carrinho" (<code>cart</code>).</p>
+    
+    <div class="code-grid">
+      <div class="code-panel bad">
+        <h4>❌ Acoplamento Direto (Antipadrão)</h4>
+        <pre><code>// src/features/catalog/components/product-card.tsx
+// Violação: catalog depende diretamente de cart!
+import { AddToCartButton } from '@/features/cart';
+
+export function ProductCard({ product }: Props) {
+  return (
+    &lt;div className="card"&gt;
+      &lt;h3&gt;{product.name}&lt;/h3&gt;
+      &lt;AddToCartButton productId={product.id} /&gt;
+    &lt;/div&gt;
+  );
+}</code></pre>
+      </div>
+
+      <div class="code-panel good">
+        <h4>✅ Desacoplamento por Slot (Recomendado)</h4>
+        <pre><code>// src/features/catalog/components/product-card.tsx
+// Catalog desconhece a existência do carrinho!
+interface ProductCardProps {
+  product: Product;
+  actionSlot?: React.ReactNode;
+}
+
+export function ProductCard({ product, actionSlot }: ProductCardProps) {
+  return (
+    &lt;div className="card"&gt;
+      &lt;h3&gt;{product.name}&lt;/h3&gt;
+      {actionSlot}
+    &lt;/div&gt;
+  );
+}</code></pre>
+      </div>
+    </div>
+
+    <h3>Padrão 2: Camada de Entidades Compartilhadas (Shared Entities)</h3>
+    <p><strong>Cenário:</strong> As features <code>catalog</code>, <code>cart</code> e <code>checkout</code> precisam manipular o mesmo modelo <code>Product</code>.</p>
+    <pre><code>// src/entities/product/types.ts
+export interface Product {
+  id: string;
+  sku: string;
+  name: string;
+  priceInCents: number;
+  currency: 'BRL' | 'USD';
+  stockQuantity: number;
+}
+
+// Tanto features/catalog quanto features/cart importam de @entities/product
+import type { Product } from '@/entities/product';</code></pre>
+
+    <h3>Padrão 3: Event-Driven / Pub-Sub Desacoplado</h3>
+    <p><strong>Cenário:</strong> Ao finalizar a compra em <code>checkout</code>, as notificações devem exibir um toast de sucesso e o carrinho deve ser limpo, sem que <code>checkout</code> importe <code>notifications</code>.</p>
+    <pre><code>// src/shared/lib/events.ts
+import mitt from 'mitt';
+
+type AppEvents = {
+  'order:placed': { orderId: string; totalInCents: number };
+  'cart:item-added': { productId: string; quantity: number };
+};
+
+export const eventBus = mitt&lt;AppEvents&gt;();
+
+// Na feature checkout (Emissor):
+eventBus.emit('order:placed', { orderId: 'ord_123', totalInCents: 4990 });
+
+// Na feature notifications (Ouvinte desacoplado):
+eventBus.on('order:placed', ({ orderId }) =&gt; {
+  toast.success(`Pedido #${orderId} confirmado com sucesso!`);
+});</code></pre>
+
+    <h3>Padrão 4: Cross-Feature Selectors (Leitura Pública de Estado)</h3>
+    <p><strong>Cenário:</strong> A feature <code>checkout</code> precisa saber quantos itens existem no carrinho.</p>
+    <pre><code>// src/features/cart/index.ts (Public API)
+export { useCartSummary } from './hooks/use-cart-summary';
+export { useCartCount } from './stores/cart-store';
+
+// src/features/checkout/components/checkout-header.tsx
+// ✅ Permitido: importando selector explícito da Public API oficial
+import { useCartSummary } from '@/features/cart';</code></pre>
+
+    <h2>3. Thin Routes vs Colocation no Next.js App Router</h2>
+    <table class="matrix-table">
+      <thead>
+        <tr>
+          <th>Aspecto</th>
+          <th>Thin Routes (Recomendado)</th>
+          <th>Colocation Radical</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Estrutura de Pastas</strong></td>
+          <td><code>src/app/(shop)/checkout/page.tsx</code> apenas importa <code>@features/checkout</code></td>
+          <td>Páginas inteiras residem dentro de <code>src/features/checkout/routes/</code></td>
+        </tr>
+        <tr>
+          <td><strong>Vantagem</strong></td>
+          <td>Clara separação entre framework (rotas/layouts) e lógica de negócio. Facilita migração de frameworks.</td>
+          <td>Máxima proximidade de arquivos relacionados à rota.</td>
+        </tr>
+        <tr>
+          <td><strong>Desvantagem</strong></td>
+          <td>Camada fina extra de arquivo <code>page.tsx</code> por rota.</td>
+          <td>Acoplamento com as convenções de roteamento do framework dentro das features.</td>
+        </tr>
+        <tr>
+          <td><strong>Papel do page.tsx</strong></td>
+          <td>Extrai params, invoca Server Actions/Features e injeta Slots de composição.</td>
+          <td>Apenas re-exporta a página interna da feature.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>4. Como Evitar o Código Kamehameha (Slot Hell no JSX)</h2>
+    <p>Quando a composição por slots é usada em excesso na <code>page.tsx</code>, a indentação do JSX forma uma pirâmide profunda (<code>&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;</code>). Utilize as estratégias abaixo para manter o código plano:</p>
+
+    <div class="code-grid">
+      <div class="code-panel bad">
+        <h4>❌ Pirâmide de Slots (Kamehameha)</h4>
+        <pre><code>// page.tsx com slots excessivos
+&lt;PageLayout
+  header={
+    &lt;Header
+      actions={
+        &lt;CartBadge
+          dropdown={
+            &lt;CartDropdown
+              checkout={&lt;CheckoutBtn /&gt;}
+            /&gt;
+          }
+        /&gt;
+      }
+    /&gt;
+  }
+/&gt;</code></pre>
+      </div>
+
+      <div class="code-panel good">
+        <h4>✅ Compound Components ou Widgets</h4>
+        <pre><code>// page.tsx plana e declarativa
+&lt;ShopHeader /&gt;
+&lt;CatalogProductGrid /&gt;
+
+// Ou usando Compound Components:
+&lt;ProductCard product={item}&gt;
+  &lt;ProductCard.Image /&gt;
+  &lt;ProductCard.Title /&gt;
+  &lt;ProductCard.Actions&gt;
+    &lt;AddToCartButton productId={item.id} /&gt;
+  &lt;/ProductCard.Actions&gt;
+&lt;/ProductCard&gt;</code></pre>
+      </div>
+    </div>
+
+    <footer class="doc-footer">
+      <a href="../reference/001-feature-folder-cheatsheet.html">← Cheat Sheet #001</a>
+      <a href="../lessons/0002-encapsulamento-public-api-e-rotas.html">Voltar para Lição 0002 →</a>
+    </footer>
+  </div>
+</body>
+</html>

@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Comparativo: Feature-Folders Pragmático vs Feature-Sliced Design (FSD)</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+  <style>
+    .ascii-box {
+      font-family: var(--font-mono);
+      background: var(--bg-code);
+      color: #38bdf8;
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-md);
+      padding: 1.25rem;
+      margin: 1.25rem 0;
+      white-space: pre;
+      line-height: 1.45;
+      font-size: 0.82rem;
+      overflow-x: auto;
+    }
+    .compare-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1.25rem 0;
+      font-size: 0.88rem;
+    }
+    .compare-table th, .compare-table td {
+      border: 1px solid var(--border-subtle);
+      padding: 0.75rem;
+      text-align: left;
+      vertical-align: top;
+    }
+    .compare-table th {
+      background: var(--bg-elevated);
+      font-weight: 700;
+    }
+    .compare-table tr:nth-child(even) {
+      background: var(--bg-surface);
+    }
+    .layer-badge {
+      display: inline-block;
+      padding: 0.15rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      margin: 0.15rem 0.25rem 0.15rem 0;
+    }
+    .layer-app { background: #7c3aed; color: #fff; }
+    .layer-pages { background: #2563eb; color: #fff; }
+    .layer-widgets { background: #0891b2; color: #fff; }
+    .layer-features { background: #059669; color: #fff; }
+    .layer-entities { background: #d97706; color: #fff; }
+    .layer-shared { background: #64748b; color: #fff; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="doc-nav">
+      <a href="../reference/003-server-state-and-testing-guide.html">← Referência #003</a>
+      <a href="../lessons/0004-governanca-eslint-boundaries-e-fsd.html">Ir para Lição 0004 →</a>
+    </div>
+
+    <header class="doc-header">
+      <div class="doc-badge">Referência Técnica #004</div>
+      <h1 class="doc-title">Feature-Folders Pragmático vs Feature-Sliced Design (FSD)</h1>
+      <p class="doc-subtitle">Comparativo estrutural, regras de camadas, cenários de adoção e configuração real de ESLint Boundaries.</p>
+    </header>
+
+    <h2>1. Hierarquia de Camadas do FSD</h2>
+    <p>O Feature-Sliced Design formaliza 6 camadas com direção estrita de dependência (de cima para baixo):</p>
+
+    <div class="ascii-box">
+ ┌─────────────────────────────────────────────────────────────────────────────────┐
+ │ <span style="color:#c084fc;">CAMADA 1: app/</span>    Inicialização, providers globais, routing, estilos globais     │
+ │                    Só existe UMA instância. Importa qualquer camada abaixo.     │
+ ├─────────────────────────────────────────────────────────────────────────────────┤
+ │ <span style="color:#60a5fa;">CAMADA 2: pages/</span>  Composição de widgets e features para formar telas          │
+ │                    Equivalente ao Next.js app/page.tsx + layout.tsx             │
+ ├─────────────────────────────────────────────────────────────────────────────────┤
+ │ <span style="color:#22d3ee;">CAMADA 3: widgets/</span> Blocos compostos autônomos de UI (Header, Sidebar, Footer) │
+ │                    Montam features e entities dentro deles.                     │
+ ├─────────────────────────────────────────────────────────────────────────────────┤
+ │ <span style="color:#34d399;">CAMADA 4: features/</span> Ações do usuário com efeito colateral                     │
+ │                    Ex: AddToCart, Login, SearchProducts, PlaceOrder             │
+ ├─────────────────────────────────────────────────────────────────────────────────┤
+ │ <span style="color:#fbbf24;">CAMADA 5: entities/</span> Modelos de negócio e representação visual canônica        │
+ │                    Ex: Product (card, model, API), User, Order                  │
+ ├─────────────────────────────────────────────────────────────────────────────────┤
+ │ <span style="color:#94a3b8;">CAMADA 6: shared/</span>  Utilitários agnósticos de negócio                          │
+ │                    UI Kit, HTTP Client, formatadores, constantes                │
+ └─────────────────────────────────────────────────────────────────────────────────┘
+
+ Regra de Ouro do FSD:
+ ► Uma camada SÓ pode importar de camadas ABAIXO dela. NUNCA de cima ou da mesma camada.
+ ► features/ PODE importar de entities/ e shared/. Mas NUNCA de pages/ ou widgets/.</div>
+
+    <h2>2. Feature-Folders Pragmático vs FSD: Mapeamento Estrutural</h2>
+    <table class="compare-table">
+      <thead>
+        <tr>
+          <th>Aspecto</th>
+          <th>Feature-Folders Pragmático</th>
+          <th>Feature-Sliced Design (FSD)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Número de Camadas</strong></td>
+          <td>3 camadas flexíveis:<br><code>app/routes</code>, <code>features</code>, <code>shared</code></td>
+          <td>6 camadas estritas:<br>
+            <span class="layer-badge layer-app">app</span>
+            <span class="layer-badge layer-pages">pages</span>
+            <span class="layer-badge layer-widgets">widgets</span>
+            <span class="layer-badge layer-features">features</span>
+            <span class="layer-badge layer-entities">entities</span>
+            <span class="layer-badge layer-shared">shared</span>
+          </td>
+        </tr>
+        <tr>
+          <td><strong>Definição de "Feature"</strong></td>
+          <td>Módulo de domínio completo (ex: <code>cart/</code> contém UI, API, hooks, store, testes)</td>
+          <td>Apenas a <strong>ação do usuário com efeito colateral</strong>. A representação visual do modelo vive em <code>entities/</code></td>
+        </tr>
+        <tr>
+          <td><strong>Onde ficam ProductCard, UserAvatar?</strong></td>
+          <td><code>features/catalog/components/</code></td>
+          <td><code>entities/product/ui/</code> (card e modelo ficam juntos na entidade)</td>
+        </tr>
+        <tr>
+          <td><strong>Onde ficam Header, Sidebar?</strong></td>
+          <td><code>src/components/</code> (shared UI)</td>
+          <td><code>widgets/header/</code>, <code>widgets/sidebar/</code> (camada própria)</td>
+        </tr>
+        <tr>
+          <td><strong>Comunicação entre features</strong></td>
+          <td>Public API (<code>index.ts</code>) + Slots + Event Bus + Cross-Feature Selectors</td>
+          <td>Estritamente via composição em <code>pages/</code> e <code>widgets/</code>. Features NUNCA se importam entre si</td>
+        </tr>
+        <tr>
+          <td><strong>Segmentos Internos</strong></td>
+          <td>Convenção livre: <code>api/</code>, <code>components/</code>, <code>hooks/</code></td>
+          <td>Padronizados: <code>ui/</code>, <code>model/</code>, <code>api/</code>, <code>lib/</code>, <code>config/</code></td>
+        </tr>
+        <tr>
+          <td><strong>Enforcement</strong></td>
+          <td><code>eslint-plugin-boundaries</code> + convenção do time</td>
+          <td><code>@feature-sliced/eslint-config</code> + <code>steiger</code> (linter oficial FSD)</td>
+        </tr>
+        <tr>
+          <td><strong>Curva de Adoção</strong></td>
+          <td>Baixa-Média. Um README de 1 página é suficiente para onboarding.</td>
+          <td>Alta. Exige estudo formal da especificação e treinamento do time.</td>
+        </tr>
+        <tr>
+          <td><strong>Cenário Ideal</strong></td>
+          <td>Times de 2-15 devs. SPAs e apps Next.js médios.</td>
+          <td>Monorepos corporativos com 20+ devs e múltiplos squads.</td>
+        </tr>
+        <tr>
+          <td><strong>Risco Principal</strong></td>
+          <td>Erosão arquitetural se linting não for configurado.</td>
+          <td>Overengineering e boilerplate excessivo em projetos menores.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>3. Configuração Real: eslint-plugin-boundaries</h2>
+    <pre><code>// eslint.config.js (Flat Config ESLint v9+)
+import boundaries from 'eslint-plugin-boundaries';
+
+export default [
+  {
+    plugins: { boundaries },
+    settings: {
+      'boundaries/elements': [
+        { type: 'app',      pattern: 'src/app/*' },
+        { type: 'feature',  pattern: 'src/features/*' },
+        { type: 'entity',   pattern: 'src/entities/*' },
+        { type: 'shared',   pattern: 'src/shared/*' },
+      ],
+      'boundaries/ignore': ['**/*.test.*', '**/*.spec.*'],
+    },
+    rules: {
+      'boundaries/element-types': [2, {
+        default: 'disallow',
+        rules: [
+          // app/ pode importar de qualquer camada
+          { from: 'app', allow: ['feature', 'entity', 'shared'] },
+
+          // features/ podem importar de entities/ e shared/
+          { from: 'feature', allow: ['entity', 'shared'] },
+
+          // features/ podem importar entre si SOMENTE via Public API (index.ts)
+          { from: 'feature', allow: [['feature', { import: 'index' }]] },
+
+          // entities/ só podem importar de shared/
+          { from: 'entity', allow: ['shared'] },
+
+          // shared/ é a base — não pode importar de cima
+          { from: 'shared', allow: ['shared'] },
+        ],
+      }],
+
+      // Proíbe deep imports dentro de features (impõe uso de index.ts)
+      'boundaries/entry-point': [2, {
+        default: 'disallow',
+        rules: [
+          { target: 'feature', allow: 'index.(ts|tsx)' },
+          { target: 'entity',  allow: 'index.(ts|tsx)' },
+        ],
+      }],
+    },
+  },
+];</code></pre>
+
+    <h2>4. Configuração Real: Dependency Cruiser</h2>
+    <pre><code>// .dependency-cruiser.cjs
+module.exports = {
+  forbidden: [
+    {
+      name: 'no-circular',
+      severity: 'error',
+      comment: 'Dependências circulares destroem tree-shaking e causam bugs de inicialização.',
+      from: {},
+      to: { circular: true },
+    },
+    {
+      name: 'no-feature-to-feature-internals',
+      severity: 'error',
+      comment: 'Features não podem importar arquivos internos de outras features.',
+      from: { path: '^src/features/([^/]+)/' },
+      to: {
+        path: '^src/features/([^/]+)/',
+        pathNot: ['^src/features/\\1/', '^src/features/[^/]+/index\\.ts$'],
+      },
+    },
+    {
+      name: 'no-shared-depends-on-features',
+      severity: 'error',
+      comment: 'A camada shared/ nunca pode importar da camada features/.',
+      from: { path: '^src/shared/' },
+      to: { path: '^src/features/' },
+    },
+  ],
+};</code></pre>
+
+    <footer class="doc-footer">
+      <a href="../reference/003-server-state-and-testing-guide.html">← Referência #003</a>
+      <a href="../lessons/0004-governanca-eslint-boundaries-e-fsd.html">Iniciar Lição 0004 →</a>
+    </footer>
+  </div>
+</body>
+</html>

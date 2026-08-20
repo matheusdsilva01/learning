@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lição 0002: Public API, Encapsulamento e Comunicação Inter-Feature</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+  <style>
+    .sim-container {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      padding: 1.5rem;
+      margin: 1.5rem 0;
+      box-shadow: var(--shadow-md);
+    }
+    .sim-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-bottom: 1.25rem;
+    }
+    .sim-btn {
+      padding: 0.6rem 1rem;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-md);
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      cursor: pointer;
+      transition: all 0.15s ease;
+      font-family: inherit;
+    }
+    .sim-btn.active {
+      background: var(--accent-primary);
+      color: #ffffff;
+      border-color: var(--accent-primary);
+    }
+    .sim-output {
+      font-family: var(--font-mono);
+      background: var(--bg-code);
+      color: #f0f2f5;
+      padding: 1.25rem;
+      border-radius: var(--radius-md);
+      font-size: 0.82rem;
+      line-height: 1.5;
+      white-space: pre;
+      overflow-x: auto;
+      border: 1px solid var(--border-strong);
+      min-height: 140px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="doc-nav">
+      <a href="./0001-anatomia-e-decomposicao.html">← Lição 0001</a>
+      <a href="../reference/002-dependency-rules-matrix.html">Ver Matriz de Dependência ↗</a>
+    </div>
+
+    <header class="doc-header">
+      <div class="doc-badge">Módulo 2 • Arquitetura Avançada</div>
+      <h1 class="doc-title">Public API, Encapsulamento & Comunicação Inter-Feature</h1>
+      <p class="doc-subtitle">Como orquestrar módulos independentes sem criar dependências circulares e sem vazar abstrações.</p>
+      <div class="doc-meta">
+        <span>⏱️ Tempo estimado: 7 minutos</span>
+        <span>🎯 Meta: Dominar Inversão de Controle com Slots, Thin Routes e Grafo Acíclico</span>
+      </div>
+    </header>
+
+    <h2>1. O Grande Dilema: "Catalog precisa de Cart"</h2>
+    <p>
+      Em qualquer e-commerce real, a tela de catálogo exibe cartões de produto (<code>features/catalog</code>). Cada cartão possui um botão "Adicionar ao Carrinho" (<code>features/cart</code>).
+    </p>
+    <p>
+      Se o componente <code>ProductCard</code> importar diretamente <code>AddToCartButton</code> de <code>@features/cart</code>:
+    </p>
+    <ul>
+      <li><code>catalog</code> torna-se rigidamente acoplado a <code>cart</code>.</li>
+      <li>Se <code>cart</code> precisar de validações de estoque vindas de <code>catalog</code>, cria-se uma <strong>dependência circular imediata</strong>.</li>
+      <li>Não é mais possível reutilizar ou testar o catálogo isoladamente (ex: em um Storybook ou microsserviço).</li>
+    </ul>
+
+    <h2>2. Simulador Interativo de Padrões de Comunicação</h2>
+    <p>Experimente os diferentes padrões abaixo e observe o impacto direto no Grafo de Dependências e no acoplamento da arquitetura:</p>
+
+    <div class="sim-container">
+      <div class="sim-controls">
+        <button class="sim-btn active" onclick="simulate('direct')">1. Import Direto (Ingênuo)</button>
+        <button class="sim-btn" onclick="simulate('slot')">2. Inversão por Slot (Recomendado)</button>
+        <button class="sim-btn" onclick="simulate('entity')">3. Entidades Compartilhadas</button>
+        <button class="sim-btn" onclick="simulate('event')">4. Barramento de Eventos</button>
+      </div>
+
+      <div class="sim-output" id="sim-display"></div>
+    </div>
+
+    <h2>3. Laboratório Aprofundado: Os 4 Padrões de Comunicação em Código Real</h2>
+    <p>Abaixo estão os exemplos concretos em TypeScript para cada um dos padrões de arquitetura:</p>
+
+    <!-- PADRÃO 1 -->
+    <div class="callout danger" style="margin-top: 1.5rem;">
+      <div class="callout-title">Padrão 1: Import Direto (O Antipadrão e a Dependência Circular)</div>
+      <p>Veja como o acoplamento ingênuo entre duas features gera dependência circular e quebras silenciosas em runtime:</p>
+    </div>
+
+    <h3>1.1 O Código do Acoplamento</h3>
+    <div class="code-diff-block"><span class="diff-info">// Arquivo A: src/features/catalog/components/product-card.tsx</span>
+<span class="diff-del">import { AddToCartButton } from '@/features/cart'; // ❌ Catalog depende de Cart</span>
+
+export function ProductCard({ product }: { product: Product }) {
+  return (
+    &lt;div className="product-card"&gt;
+      &lt;h3&gt;{product.name}&lt;/h3&gt;
+      &lt;AddToCartButton productId={product.id} /&gt;
+    &lt;/div&gt;
+  );
+}</div>
+
+    <div class="code-diff-block"><span class="diff-info">// Arquivo B: src/features/cart/components/add-to-cart-button.tsx</span>
+<span class="diff-del">import { checkProductStock } from '@/features/catalog'; // ❌ Cart depende de volta de Catalog!</span>
+
+export function AddToCartButton({ productId }: { productId: string }) {
+  const isAvailable = checkProductStock(productId);
+  return &lt;button disabled={!isAvailable}&gt;Adicionar ao Carrinho&lt;/button&gt;;
+}</div>
+
+    <div class="code-diff-block"><span class="diff-info">🚨 Saída do Bundler / Linter (Webpack, Vite ou ESLint):</span>
+<span class="diff-del">[CIRCULAR DEPENDENCY DETECTED]
+src/features/catalog/index.ts
+  └─► components/product-card.tsx
+        └─► @features/cart (index.ts)
+              └─► components/add-to-cart-button.tsx
+                    └─► @features/catalog (index.ts) [CICLO FECHADO 💥]</span>
+
+⚠️ Consequência em Produção:
+1. `checkProductStock` pode ser avaliado como `undefined` durante o carregamento inicial dos módulos.
+2. Tree-shaking é destruído: quem usar apenas o Catálogo será obrigado a baixar 100% do bundle do Carrinho.</div>
+
+    <!-- PADRÃO 2 -->
+    <div class="callout success" style="margin-top: 2rem;">
+      <div class="callout-title">Padrão 2: Inversão de Controle com Slots (Slot Pattern)</div>
+      <p>O Catálogo expõe uma "abertura" (slot) e a página orquestradora injeta o botão do Carrinho:</p>
+    </div>
+
+    <div class="code-diff-block"><span class="diff-info">// src/features/catalog/components/product-card.tsx (Agnóstico e Isolado)</span>
+interface ProductCardProps {
+  product: Product;
+<span class="diff-add">+ actionSlot?: React.ReactNode; // ✅ Slot aberto para qualquer ação externa</span>
+}
+
+export function ProductCard({ product, actionSlot }: ProductCardProps) {
+  return (
+    &lt;article className="product-card"&gt;
+      &lt;h3&gt;{product.name}&lt;/h3&gt;
+      &lt;span&gt;R$ {(product.priceInCents / 100).toFixed(2)}&lt;/span&gt;
+<span class="diff-add">+     &lt;div className="card-actions"&gt;{actionSlot}&lt;/div&gt;</span>
+    &lt;/article&gt;
+  );
+}</div>
+
+    <div class="code-diff-block"><span class="diff-info">// src/app/(shop)/catalog/page.tsx (Orquestrador / Thin Route)</span>
+import { ProductGrid } from '@/features/catalog';
+import { AddToCartButton } from '@/features/cart';
+import { getProducts } from '@/features/catalog/api/get-products';
+
+export default async function CatalogPage() {
+  const products = await getProducts();
+
+  return (
+    &lt;main&gt;
+      &lt;h1&gt;Catálogo Oficial&lt;/h1&gt;
+      &lt;ProductGrid
+        products={products}
+        renderAction={(product) =&gt; (
+<span class="diff-add">+         &lt;AddToCartButton productId={product.id} /&gt; // ✅ Injeção limpa de dependência</span>
+        )}
+      /&gt;
+    &lt;/main&gt;
+  );
+}</div>
+
+    <!-- PADRÃO 3 -->
+    <div class="callout tip" style="margin-top: 2rem;">
+      <div class="callout-title">Padrão 3: Camada de Entidades Compartilhadas (`src/entities/`)</div>
+      <p>Quando múltiplos módulos precisam do mesmo modelo de domínio, ele reside na camada `entities/`:</p>
+    </div>
+
+    <div class="code-diff-block"><span class="diff-info">// src/entities/product/types.ts (Modelo Canônico de Domínio)</span>
+export interface Product {
+  id: string;
+  sku: string;
+  name: string;
+  priceInCents: number;
+  currency: 'BRL' | 'USD';
+  stockQuantity: number;
+}
+
+export interface Money {
+  amountInCents: number;
+  currency: 'BRL' | 'USD';
+}</div>
+
+    <div class="code-diff-block"><span class="diff-info">// src/entities/product/index.ts (Public API da Entidade)</span>
+export * from './types';
+export { formatMoney } from './lib/format-money';
+export { ProductPriceBadge } from './ui/product-price-badge';</div>
+
+    <div class="code-diff-block"><span class="diff-info">// Consumo Unificado sem Acoplamento Cruzado:</span>
+
+// Em src/features/catalog/api/get-products.ts:
+import type { Product } from '@/entities/product';
+export async function getProducts(): Promise&lt;Product[]&gt; { /* ... */ }
+
+// Em src/features/cart/stores/cart-store.ts:
+import type { Product } from '@/entities/product';
+interface CartItem {
+  product: Product;
+  quantity: number;
+}
+
+// Em src/features/checkout/components/order-summary.tsx:
+import { formatMoney } from '@/entities/product';
+const formattedTotal = formatMoney({ amountInCents: 15990, currency: 'BRL' });</div>
+
+    <!-- PADRÃO 4 -->
+    <div class="callout warning" style="margin-top: 2rem;">
+      <div class="callout-title">Padrão 4: Barramento de Eventos Desacoplado (Typed Event Bus)</div>
+      <p>Comunicação assíncrona entre fluxos transacionais (ex: Checkout finalizado notificando Toast e limpando Carrinho):</p>
+    </div>
+
+    <div class="code-diff-block"><span class="diff-info">// src/shared/lib/event-bus.ts (Definição Tipada Global)</span>
+import mitt from 'mitt';
+import type { Product } from '@/entities/product';
+
+export type AppEvents = {
+  'order:placed': {
+    orderId: string;
+    items: Array&lt;{ product: Product; quantity: number }&gt;;
+    totalInCents: number;
+  };
+  'cart:item-added': { productId: string; quantity: number };
+  'auth:session-expired': void;
+};
+
+export const eventBus = mitt&lt;AppEvents&gt;();</div>
+
+    <div class="code-diff-block"><span class="diff-info">// 1. Emissor: src/features/checkout/api/use-place-order.ts</span>
+import { eventBus } from '@/shared/lib/event-bus';
+
+export function usePlaceOrder() {
+  return async function placeOrder(orderPayload: OrderDTO) {
+    const response = await api.post('/orders', orderPayload);
+
+    // 📢 Emite evento de negócio sem saber quem está ouvindo
+    eventBus.emit('order:placed', {
+      orderId: response.data.id,
+      items: orderPayload.items,
+      totalInCents: response.data.totalInCents
+    });
+
+    return response.data;
+  };
+}</div>
+
+    <div class="code-diff-block"><span class="diff-info">// 2. Ouvinte A: src/features/notifications/hooks/use-order-notifications.ts</span>
+import { useEffect } from 'react';
+import { eventBus } from '@/shared/lib/event-bus';
+import { toast } from '@/shared/ui/toast';
+
+export function useOrderNotifications() {
+  useEffect(() =&gt; {
+    const handleOrderPlaced = ({ orderId, totalInCents }: { orderId: string; totalInCents: number }) =&gt; {
+      toast.success(`Pedido #${orderId} de R$ ${(totalInCents / 100).toFixed(2)} confirmado!`);
+    };
+
+    eventBus.on('order:placed', handleOrderPlaced);
+    return () =&gt; eventBus.off('order:placed', handleOrderPlaced);
+  }, []);
+}</div>
+
+    <div class="code-diff-block"><span class="diff-info">// 3. Ouvinte B: src/features/cart/hooks/use-cart-cleanup-listener.ts</span>
+import { useEffect } from 'react';
+import { eventBus } from '@/shared/lib/event-bus';
+import { useCartStore } from '../stores/cart-store';
+
+export function useCartCleanupListener() {
+  const clearCart = useCartStore((state) =&gt; state.clearCart);
+
+  useEffect(() =&gt; {
+    // 🧹 Limpa o carrinho automaticamente quando um pedido for realizado
+    eventBus.on('order:placed', clearCart);
+    return () =&gt; eventBus.off('order:placed', clearCart);
+  }, [clearCart]);
+}</div>
+
+    <h2>4. A Anatomia de uma Public API Blindada</h2>
+    <p>No arquivo <code>src/features/cart/index.ts</code>, devemos seguir três regras fundamentais:</p>
+
+    <div class="callout tip">
+      <div class="callout-title">1. Exportar apenas componentes de contêiner ou gatilhos</div>
+      <p>Exporte <code>CartDrawer</code>, <code>AddToCartButton</code>. Nunca exporte subcomponentes como <code>CartItemSummaryRow</code>.</p>
+    </div>
+
+    <div class="callout warning">
+      <div class="callout-title">2. Exportar seletores e contratos de leitura de estado</div>
+      <p>Exporte hooks como <code>useCartSummary()</code> ou <code>useCartItemCount()</code> para permitir que a navbar ou o checkout leiam dados consolidados.</p>
+    </div>
+
+    <div class="callout danger">
+      <div class="callout-title">3. Jamais exportar queries internas ou implementações mutáveis</div>
+      <p>Não exporte mutações brutas como <code>useAddToCartMutation</code> diretamente para fora da feature. Encapsule o comportamento em componentes ou hooks de alto nível.</p>
+    </div>
+
+    <h2>5. Teste Seu Conhecimento Técnico</h2>
+    <div id="quiz-mod2-1"></div>
+    <div id="quiz-mod2-2" style="margin-top: 1.5rem;"></div>
+
+    <h2>6. Fonte Primária Recomendada</h2>
+    <div class="source-card">
+      <div class="source-icon">📚</div>
+      <div class="source-content">
+        <h4>Component Composition & Inversion of Control in React</h4>
+        <p>Referência clássica de Kent C. Dodds e Martin Fowler sobre como Inversão de Controle elimina prop drilling e dependências circulares entre módulos de UI.</p>
+        <a href="https://kentcdodds.com/blog/prop-drilling" target="_blank" rel="noreferrer">
+          Ler artigo sobre Composição e Inversão de Controle ↗
+        </a>
+      </div>
+    </div>
+
+    <div class="callout success">
+      <div class="callout-title">🏆 Vitória Tangível desta Lição</div>
+      <p>Você dominou o padrão de <strong>Inversão de Controle por Slots</strong> e a arquitetura de <strong>Thin Routes</strong>, permitindo que features complexas coexistam e interajam sem nenhum acoplamento cruzado ou risco de dependência circular.</p>
+    </div>
+
+    <div class="followup-box">
+      <strong>💬 Dúvidas ou Casos Especiais:</strong> Quer debater como aplicar isso com Server Actions do Next.js ou com Zustand? Basta enviar sua dúvida aqui no chat!
+    </div>
+
+    <footer class="doc-footer">
+      <a href="./0001-anatomia-e-decomposicao.html">← Lição Anterior</a>
+      <a href="../reference/002-dependency-rules-matrix.html">Consultar Matriz de Regras →</a>
+    </footer>
+  </div>
+
+  <script src="../assets/quiz.js"></script>
+  <script>
+    const simDisplay = document.getElementById('sim-display');
+    const simBtns = document.querySelectorAll('.sim-btn');
+
+    const simData = {
+      direct: `[PADRÃO: IMPORT DIRETO ENTRE FEATURES]
+Grafo:
+  features/catalog ────────► features/cart
+         ▲                         │
+         │                         │ (Risco iminente de ciclo!)
+         └─────────────────────────┘
+
+Diagnóstico Arquitetural:
+• Acoplamento: ALTO E RÍGIDO (Tightly Coupled)
+• Dependência Circular: RISCO CRÍTICO
+• Reusabilidade do Catálogo: NULA (arrasta todo o bundle do carrinho)
+• Avaliação: ❌ ANTIPADRÃO EM PROJETOS MÉDIOS/GRANDES`,
+
+      slot: `[PADRÃO: INVERSÃO DE CONTROLE VIA SLOT]
+Grafo:
+         ┌─────────────────────────┐
+         │     app/catalog/page    │ (Thin Route)
+         └────────────┬────────────┘
+                      │
+           ┌──────────┴──────────┐
+           ▼                     ▼
+  features/catalog        features/cart
+  (Recebe Slot)           (Injetado no Slot)
+
+Diagnóstico Arquitetural:
+• Acoplamento: ZERO entre catalog e cart (DAG Perfeito)
+• Dependência Circular: IMPOSSÍVEL (as features não se conhecem)
+• Reusabilidade: MÁXIMA (catalog roda em qualquer app sem cart)
+• Avaliação: ✅ PADRÃO CANÔNICO RECOMENDADO`,
+
+      entity: `[PADRÃO: ENTIDADES TRANSVERSAIS COMPARTILHADAS]
+Grafo:
+  features/catalog ──► src/entities/product ◄── features/cart
+                             (Modelos, Schemas Zod)
+
+Diagnóstico Arquitetural:
+• Acoplamento: Ambas dependem exclusivamente do contrato da entidade
+• Dependência Circular: NENHUMA (fluxo top-down)
+• Consistência de Tipos: 100% sincronizada entre catálogo e checkout
+• Avaliação: ✅ EXCELENTE PARA MODELOS DE DOMÍNIO UNIVERSAIS`,
+
+      event: `[PADRÃO: EVENT-DRIVEN / PUB-SUB DESACOPLADO]
+Grafo:
+  features/checkout ──(Emite: order:placed)──► EventBus (shared/lib)
+                                                   │
+                                                   ▼
+                                         features/notifications
+                                         (Ouve o evento)
+
+Diagnóstico Arquitetural:
+• Acoplamento: Checkout desconhece completamente o sistema de notificações
+• Adição de novas reações: ZERO alteração na feature de checkout (Open/Closed Principle)
+• Avaliação: ✅ IDEAL PARA PROCESSOS TRANSACIONAIS E NOTIFICAÇÕES`
+    };
+
+    function simulate(pattern) {
+      simBtns.forEach(b => b.classList.remove('active'));
+      const activeBtn = Array.from(simBtns).find(b => b.getAttribute('onclick').includes(pattern));
+      if (activeBtn) activeBtn.classList.add('active');
+      simDisplay.textContent = simData[pattern];
+    }
+
+    // Inicialização do simulador
+    simulate('direct');
+
+    // Quizzes com balanceamento estrito de contagem de palavras
+    new QuizWidget('quiz-mod2-1', {
+      question: '1. Como o componente ProductCard (catalog) deve exibir o botão de compra sem depender da feature cart?',
+      answers: [
+        {
+          text: 'Recebendo o botão através de uma prop de slot renderizada pela página orquestradora.',
+          isCorrect: true,
+          explanation: 'A Inversão de Controle permite que o ProductCard renderize o slot sem saber qual componente o preencherá.'
+        },
+        {
+          text: 'Importando diretamente o AddToCartButton do arquivo de índice público da feature cart.',
+          isCorrect: false,
+          explanation: 'O import direto acopla catalog a cart, impedindo que catalog funcione de forma isolada e autônoma.'
+        },
+        {
+          text: 'Movendo todo o código do ProductCard para dentro do diretório privado da feature cart.',
+          isCorrect: false,
+          explanation: 'O ProductCard pertence semanticamente ao domínio de catálogo, e não ao domínio exclusivo de carrinho.'
+        }
+      ]
+    });
+
+    new QuizWidget('quiz-mod2-2', {
+      question: '2. Qual deve ser o papel principal de um arquivo `page.tsx` no modelo de Thin Routes do Next.js?',
+      answers: [
+        {
+          text: 'Orquestrar a página, obter parâmetros de rota e realizar a composição entre features.',
+          isCorrect: true,
+          explanation: 'Thin Routes funcionam como controladores finos: orquestram dados da rota e montam features públicas via slots.'
+        },
+        {
+          text: 'Conter toda a lógica de estado, formulários complexos e regras de negócio da funcionalidade.',
+          isCorrect: false,
+          explanation: 'Colocar regras de negócio na page.tsx acopla a lógica ao framework e destrói o isolamento das features.'
+        },
+        {
+          text: 'Re-exportar todos os hooks privados e mutações internas das features sem validação.',
+          isCorrect: false,
+          explanation: 'A page.tsx consome componentes e seletores, nunca expondo detalhes privados para o restante do app.'
+        }
+      ]
+    });
+  </script>
+</body>
+</html>
