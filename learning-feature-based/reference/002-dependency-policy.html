@@ -1,0 +1,21 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Referência 002 — Política de dependências</title><link rel="stylesheet" href="../assets/styles.css"></head><body><main class="container">
+<nav class="doc-nav"><a href="./001-feature-boundary-map.html">Anterior</a><a href="../index.html">Índice</a><a href="../lessons/0004-compor-no-app-router.html">Lição 0004</a></nav>
+<header class="doc-header"><div class="doc-badge">Referência 002 / Normativa</div><h1 class="doc-title">Política de dependências</h1><p class="doc-subtitle">A matriz aplicada pelo laboratório. Exceções exigem ADR e fixture.</p></header>
+<h2>Matriz</h2><div class="rule-table-wrap"><table class="rule-table"><thead><tr><th>Origem</th><th>Destino</th><th>Status</th><th>Entrada</th></tr></thead><tbody><tr><td>`app`</td><td>`features`, `entities`, `shared`</td><td><span class="badge-allow">permitido</span></td><td>API pública para feature/entity</td></tr><tr><td>`feature A`</td><td>`feature A`</td><td><span class="badge-allow">permitido</span></td><td>Import relativo interno</td></tr><tr><td>`feature A`</td><td>`feature B`</td><td><span class="badge-deny">proibido</span></td><td>Compor acima</td></tr><tr><td>`feature`</td><td>`entities`, `shared`</td><td><span class="badge-allow">permitido</span></td><td>API pública para entity</td></tr><tr><td>`entity A`</td><td>`entity B`</td><td><span class="badge-deny">proibido</span></td><td>Compor acima ou novo contrato</td></tr><tr><td>`entity`</td><td>`shared`</td><td><span class="badge-allow">permitido</span></td><td>Direta</td></tr><tr><td>`shared`</td><td>Camada superior</td><td><span class="badge-deny">proibido</span></td><td>Mover comportamento ao owner</td></tr></tbody></table></div>
+<h2>Entradas públicas</h2><pre><code>src/features/cart/
+├── index.ts          # seguro para consumo universal/client
+├── index.server.ts   # loaders, Server Components, DAL
+├── components/       # detalhes internos
+├── api/              # detalhes internos
+└── model/            # detalhes internos
+
+// certo
+import { CartButton } from '@/features/cart'
+import { loadCart } from '@/features/cart/index.server'
+
+// errado
+import { CartRow } from '@/features/cart/components/cart-row'</code></pre>
+<h2>Padrões de colaboração</h2><div class="rule-table-wrap"><table class="rule-table"><thead><tr><th>Necessidade</th><th>Padrão inicial</th><th>Evite</th></tr></thead><tbody><tr><td>Inserir ação de cart em catalog</td><td>Composição em `app` com `ReactNode`</td><td>`catalog → cart`</td></tr><tr><td>Compartilhar `Product` estável</td><td>`entities/product`</td><td>Duplicar contrato divergente</td></tr><tr><td>Coordenar checkout e limpeza do cart</td><td>Orquestrador explícito/server transaction</td><td>Event bus em memória como garantia</td></tr><tr><td>Reutilizar montagem complexa</td><td>Composer/widget de camada superior</td><td>Colocar domínio em `shared`</td></tr></tbody></table></div>
+<h2>Fronteira React</h2><div class="callout warning"><div class="callout-title">Eixo independente</div><p>`feature → shared` pode ser arquiteturalmente permitido e ainda falhar se um Client Component importar um módulo `server-only`. Valide direção de camada e ambiente.</p></div>
+<h2>Checklist de review</h2><ul><li>O import entra pela API pública?</li><li>A origem pode conhecer a camada de destino?</li><li>Uma feature passou a conhecer outra?</li><li>O entry point mistura server-only e client-safe?</li><li>A regra automatizada cobre testes e aliases?</li></ul>
+<footer class="doc-footer"><a href="../decisions/0001-dependency-policy.md">ADR 0001</a><a href="./004-governance-recipes.html">Automatizar matriz</a></footer></main></body></html>

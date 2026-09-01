@@ -1,0 +1,27 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Lição 0007 — Testar com MSW</title><link rel="stylesheet" href="../assets/styles.css"><script src="../assets/course.js" defer></script><script src="../assets/quiz.js" defer></script></head>
+<body data-lesson="0007" data-lesson-total="9"><main class="container"><nav class="doc-nav"><a href="./0006-modelar-server-state.html">Anterior</a><a href="../index.html">Índice</a><a href="./0008-automatizar-fronteiras.html">Próxima</a></nav>
+<header class="doc-header"><div class="doc-badge">Lição 0007 / Teste</div><h1 class="doc-title">Observe o contrato pela interface.</h1><p class="doc-subtitle">Intercepte HTTP na fronteira e teste o que o usuário percebe, não a implementação do hook.</p><div class="doc-meta"><span>18–25 minutos</span><span>Resultado: teste de integração</span></div></header>
+<section class="reading-column"><h2>O que MSW cobre</h2><p>No Vitest com JSDOM, `setupServer` intercepta requisições emitidas pelo processo Node. Ele não inicia um servidor e não testa o backend real, banco, autenticação implantada ou chamadas diretas ao ORM.</p>
+<pre><code>// test/setup.ts
+beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
+afterEach(() => server.resetHandlers())
+afterAll(() => server.close())
+
+// feature handler — MSW 2
+http.delete('/api/cart/items/:itemId', () => HttpResponse.json({ ok: true }))</code></pre>
+<h2>Teste pelo comportamento</h2><pre><code>it('remove um item confirmado pela API', async () => {
+  const user = userEvent.setup()
+  render(&lt;Cart /&gt;, { wrapper: createWrapper() })
+
+  expect(await screen.findByText('Caderno técnico')).toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: /remover caderno/i }))
+
+  expect(await screen.findByText(/item removido/i)).toBeInTheDocument()
+  expect(screen.queryByText('Caderno técnico')).not.toBeInTheDocument()
+})</code></pre>
+<p>Esperar apenas o desaparecimento pode gerar falso positivo se a UI remove otimisticamente e depois faz rollback. Aguarde um estado que só ocorre após a conclusão ou teste separadamente sucesso e erro.</p>
+<div class="rule-table-wrap"><table class="rule-table"><thead><tr><th>Prefira</th><th>Evite como padrão</th></tr></thead><tbody><tr><td>`getByRole` com nome acessível</td><td>`data-testid` para controles semânticos</td></tr><tr><td>`userEvent.setup()` e `await`</td><td>`fireEvent` para interações comuns</td></tr><tr><td>Resposta 400/500 e reação visível</td><td>Asserção interna dentro do handler</td></tr><tr><td>Handler local para cenário</td><td>Estado compartilhado vazando entre testes</td></tr></tbody></table></div>
+<h2>Prática</h2><div class="exercise"><div class="exercise-kicker">Dois caminhos</div><p>Implemente um teste de sucesso e outro de rollback. No segundo, sobrescreva o handler com `server.use` e responda 500. Ambos devem começar pela mesma ação do usuário.</p></div><div id="quiz-7"></div>
+<h2>Fontes</h2><div class="source-card"><div class="source-content"><h4>MSW 2 — Node.js integration</h4><a href="https://mswjs.io/docs/integrations/node">Ciclo do servidor</a></div></div><div class="source-card"><div class="source-content"><h4>Testing Library — user-event</h4><a href="https://testing-library.com/docs/user-event/intro">Interações recomendadas</a></div></div>
+</section><footer class="doc-footer"><button class="action-button" data-complete-lesson>Marcar lição como concluída</button><a href="../reference/003-state-and-testing-checklist.html">Checklist de testes</a></footer></main>
+<script>window.addEventListener('DOMContentLoaded',()=>new QuizWidget('quiz-7',{question:'Por que esperar apenas o item desaparecer pode ser insuficiente?',hint:'Considere o momento em que a atualização otimista acontece.',answers:[{text:'A asserção pode passar antes da resposta e ignorar um rollback posterior.',isCorrect:true,explanation:'O teste precisa observar a conclusão do fluxo ou validar sucesso e erro separadamente.'},{text:'O MSW não consegue interceptar métodos HTTP DELETE.',isCorrect:false,explanation:'MSW 2 intercepta DELETE com `http.delete` normalmente.'},{text:'Testing Library nunca repete asserções assíncronas.',isCorrect:false,explanation:'`findBy*` e `waitFor` oferecem espera; o problema é escolher o estado observável correto.'}]}));</script></body></html>

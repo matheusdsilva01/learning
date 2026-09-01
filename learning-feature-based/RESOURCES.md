@@ -1,50 +1,55 @@
-# Recursos de Aprendizado (Knowledge Base)
+# Recursos sobre fronteiras de frontend
 
-Fontes canônicas de alta confiança sobre arquitetura modular no frontend, limites de dependência e Feature-Folders.
+Fontes consultadas em 31 de agosto de 2026. Para exemplos dependentes de versão, consulte também `lab/package.json`.
 
----
+## Conhecimento
 
-## 1. Arquiteturas Modulares & Feature-Folders
+- [Next.js 16.3.3: Server and Client Components](https://nextjs.org/docs/app/getting-started/server-and-client-components)
+  Fonte oficial para grafos server/client, serialização e composição por `children`. Use ao revisar fronteiras do App Router.
+- [Next.js: Server and Client Boundary](https://nextjs.org/docs/app/guides/server-and-client-boundary)
+  Detalha onde cada tipo de componente executa e como evitar environment poisoning.
+- [React: `use client`](https://react.dev/reference/rsc/use-client)
+  Referência normativa para a fronteira do grafo cliente e tipos serializáveis.
+- [TanStack Query: Query Keys](https://tanstack.com/query/latest/docs/framework/react/guides/query-keys)
+  Regras para identidade, variáveis e serialização de chaves.
+- [TanStack Query: Optimistic Updates](https://tanstack.com/query/latest/docs/framework/react/guides/optimistic-updates)
+  Distingue atualização visual por `variables` de atualização direta do cache e documenta rollback.
+- [TanStack Query: Query Invalidation](https://tanstack.com/query/latest/docs/framework/react/guides/query-invalidation)
+  Explica que invalidar marca dados como stale e pode iniciar refetch; não remove automaticamente o cache.
+- [MSW 2: Node.js integration](https://mswjs.io/docs/integrations/node)
+  Ciclo `listen`, `resetHandlers` e `close` para Vitest/Jest.
+- [Testing Library: user-event 14](https://testing-library.com/docs/user-event/intro)
+  Interações por `userEvent.setup()` e consultas orientadas à acessibilidade.
+- [JS Boundaries 7: regra `dependencies`](https://www.jsboundaries.dev/docs/rules/dependencies/)
+  API atual para políticas arquiteturais. As antigas `element-types` e `entry-point` estão depreciadas.
+- [JS Boundaries: TypeScript e resolvers](https://www.jsboundaries.dev/docs/guides/typescript-support/)
+  Necessário para que aliases locais não sejam confundidos com pacotes externos.
+- [Dependency Cruiser 18: rules tutorial](https://github.com/sverweij/dependency-cruiser/blob/v18.2.0/doc/rules-tutorial.md)
+  Referência para ciclos, peer folders e reutilização de capturas com `$1`.
+- [Feature-Sliced Design 2.1: Layers](https://feature-sliced.design/docs/reference/layers)
+  Especificação das camadas, direção de dependência e exceções documentadas.
+- [Feature-Sliced Design 2.1 com Next.js](https://feature-sliced.design/docs/guides/tech/with-nextjs)
+  Recomenda `_app` e `_pages` para evitar conflito com diretórios especiais do framework e descreve `index.server.ts`.
+- [Steiger](https://github.com/feature-sliced/steiger)
+  Linter estrutural oficial do FSD. Ainda é beta; fixe versões antes de adotá-lo em CI.
+- [Colocation, Kent C. Dodds](https://kentcdodds.com/blog/colocation)
+  Princípio de proximidade entre código e consumidores. Não implica que todo artefato deva estar na mesma pasta.
+- [Screaming Architecture, Robert C. Martin](https://blog.cleancoder.com/uncle-bob/2011/09/30/Screaming-Architecture.html)
+  Argumento histórico para estruturas que revelam capacidades do produto.
+- [Bulletproof React: Project Structure](https://github.com/alan2207/bulletproof-react/blob/master/docs/project-structure.md)
+  Repositório de referência, não especificação. A versão atual evita barrels obrigatórios e prefere que features não importem outras features; este workspace adota APIs públicas explícitas com enforcement por ferramentas.
 
-* **[Bulletproof React](https://github.com/alan2207/bulletproof-react)**
-  * *Autor*: Alan Avezoux
-  * *Tipo*: Arquitetura de Referência / Repositório
-  * *Relevância*: O padrão de facto da comunidade React moderna para Feature-Folders pragmático. Define a anatomia interna de features (`api`, `components`, `hooks`, `types`, `index.ts`) e o isolamento de rotas.
+## Sabedoria e comunidade
 
-* **[Colocation (Kent C. Dodds)](https://kentcdodds.com/blog/colocation)**
-  * *Autor*: Kent C. Dodds
-  * *Tipo*: Artigo Técnico
-  * *Relevância*: Estabelece o princípio fundamental: *"Coloque o código o mais próximo possível de onde ele é utilizado"*. Essencial para entender por que testes, estilos e hooks devem viver dentro da feature.
+- [FSD Discussions](https://github.com/feature-sliced/documentation/discussions)
+  Use para confrontar casos de fronteira com praticantes da metodologia.
+- [TanStack Discord](https://tlinz.com/discord)
+  Use para problemas de concorrência, hidratação e ownership de cache que não aparecem em exemplos pequenos.
+- [MSW Discussions](https://github.com/mswjs/msw/discussions)
+  Use para limitações de interceptação e integração com ambientes de teste.
 
-* **[Screaming Architecture](https://blog.cleancoder.com/uncle-bob/2011/09/30/Screaming-Architecture.html)**
-  * *Autor*: Robert C. Martin (Uncle Bob)
-  * *Tipo*: Artigo Canônico de Arquitetura
-  * *Relevância*: Uma estrutura de diretórios deve gritar o que a aplicação *faz* (ex: `catalog`, `cart`, `checkout`), e não o framework que ela usa (`components`, `controllers`, `models`).
+## Lacunas
 
-* **[Feature-Sliced Design (FSD) Specification](https://feature-sliced.design/)**
-  * *Autor*: Core Team FSD
-  * *Tipo*: Especificação Arquitetural Formal
-  * *Relevância*: Metodologia estruturada com camadas estritas (`app`, `pages`, `widgets`, `features`, `entities`, `shared`). Utilizada como comparativo avançado no Módulo 4.
-
----
-
-## 2. Governança, Limites de Dependência e Linters
-
-* **[eslint-plugin-boundaries](https://github.com/javierbrea/eslint-plugin-boundaries)**
-  * *Autor*: Javier Brea
-  * *Tipo*: Ferramenta de Análise Estática
-  * *Relevância*: Permite definir regras arquiteturais no ESLint para proibir imports profundos (`deep imports`) e garantir que features não importem diretamente arquivos internos de outras features.
-
-* **[Dependency Cruiser](https://github.com/sverweij/dependency-cruiser)**
-  * *Autor*: Sander Verweij
-  * *Tipo*: Ferramenta de Validação e Visualização de Grafo
-  * *Relevância*: Validação formal de grafos de dependência e detecção precoce de dependências circulares entre módulos de frontend.
-
----
-
-## 3. Gerenciamento de Estado & Server State
-
-* **[Practical React Query (TkDodo)](https://tkdodo.eu/blog/practical-react-query)**
-  * *Autor*: Dominik Dorfmeister (TkDodo)
-  * *Tipo*: Série de Artigos Técnicos
-  * *Relevância*: Padrões de co-locação de queries e mutations dentro de features, gerenciamento de chaves (`queryKeyFactory`) e isolamento de contratos de API.
+- Não há benchmark universal que relacione número de features ou tamanho da equipe à necessidade de FSD.
+- Não há uma taxonomia única de “feature” aceita por todo o ecossistema React.
+- As configurações de ferramentas precisam ser executadas no projeto real; snippets isolados não provam enforcement.

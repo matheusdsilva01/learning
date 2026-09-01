@@ -1,0 +1,27 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Lição 0008 — Automatizar fronteiras</title><link rel="stylesheet" href="../assets/styles.css"><script src="../assets/course.js" defer></script><script src="../assets/quiz.js" defer></script></head>
+<body data-lesson="0008" data-lesson-total="9"><main class="container"><nav class="doc-nav"><a href="./0007-testar-com-msw.html">Anterior</a><a href="../index.html">Índice</a><a href="./0009-comparar-com-fsd.html">Próxima</a></nav>
+<header class="doc-header"><div class="doc-badge">Lição 0008 / Governança</div><h1 class="doc-title">A regra existe quando falha no arquivo errado.</h1><p class="doc-subtitle">Transforme a matriz em diagnósticos executáveis e teste casos permitidos e proibidos.</p><div class="doc-meta"><span>20–30 minutos</span><span>Resultado: lint + grafo aprovados</span></div></header>
+<section class="reading-column"><h2>Duas ferramentas, dois tempos</h2><div class="comparison-grid"><article class="comparison-card"><h3>JS Boundaries</h3><p>Feedback por arquivo no editor. A versão 7 usa `boundaries/dependencies`; `element-types` e `entry-point` são APIs legadas.</p></article><article class="comparison-card"><h3>Dependency Cruiser</h3><p>Analisa o grafo e ciclos no CI. Capturas de `from.path` são reutilizadas em `to.pathNot` com `$1`.</p></article></div>
+<h2>Política, não magia</h2><pre><code>// Ideia central da política ESLint
+{
+  from: { element: { type: 'feature' } },
+  allow: { to: [
+    { element: { type: 'entity', fileInternalPath: 'index.ts' } },
+    { element: { type: 'shared' } },
+  ] },
+}</code></pre><p>O resolver TypeScript é parte da segurança. Sem resolver `@/features/...`, o plugin pode classificar um alias local como dependência externa e não aplicar a regra esperada.</p>
+<pre><code>// Dependency Cruiser: permite apenas a própria feature
+from: { path: '^src/features/([^/]+)/' },
+to: {
+  pathNot: [
+    '^src/features/$1/',
+    '^src/entities/[^/]+/index\\.ts$',
+    '^src/shared/',
+  ],
+}</code></pre>
+<div class="callout danger"><div class="callout-title">Não ignore todos os testes</div><p>Testes também podem criar imports laterais ou profundos. Se uma exceção for necessária, limite-a a fixtures ou infraestrutura identificada.</p></div>
+<h2>Teste a regra</h2><p>Uma configuração confiável possui fixtures: um import permitido deve passar; cada classe de violação deve falhar com a regra esperada. “Lint verde” só prova a política codificada sobre os arquivos incluídos.</p>
+<h2>Prática</h2><div class="exercise"><div class="exercise-kicker">Execute</div><div class="lab-command"><code>npm run lint</code><span>arquivo</span></div><div class="lab-command"><code>npm run architecture</code><span>grafo</span></div><p>Depois introduza temporariamente `catalog → cart`, confirme a falha e reverta a linha.</p></div><div id="quiz-8"></div>
+<h2>Fonte</h2><div class="source-card"><div class="source-content"><h4>JS Boundaries — dependencies</h4><a href="https://www.jsboundaries.dev/docs/rules/dependencies/">API atual</a></div></div>
+</section><footer class="doc-footer"><button class="action-button" data-complete-lesson>Marcar lição como concluída</button><a href="../reference/004-governance-recipes.html">Configurações completas</a></footer></main>
+<script>window.addEventListener('DOMContentLoaded',()=>new QuizWidget('quiz-8',{question:'Por que configurar o resolver TypeScript no ESLint?',hint:'Pense em como o plugin classifica um alias que não consegue resolver.',answers:[{text:'Para reconhecer aliases locais e aplicar a política ao destino real.',isCorrect:true,explanation:'Sem resolução coerente, uma dependência local pode escapar como externa ou desconhecida.'},{text:'Para fazer o TypeScript compilar arquivos mais rapidamente.',isCorrect:false,explanation:'O resolver serve à análise de imports do lint, não ao desempenho do compilador.'},{text:'Para converter automaticamente deep imports em APIs públicas.',isCorrect:false,explanation:'A ferramenta diagnostica; ela não redesenha nem reescreve o contrato.'}]}));</script></body></html>

@@ -1,0 +1,22 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Referência 001 — Mapa de fronteira</title><link rel="stylesheet" href="../assets/styles.css"><script src="../assets/course.js" defer></script></head><body><main class="container">
+<nav class="doc-nav"><a href="../index.html">Índice</a><a href="../lessons/0002-delimitar-feature.html">Lição 0002</a><a href="./002-dependency-policy.html">Próxima referência</a></nav>
+<header class="doc-header"><div class="doc-badge">Referência 001 / Decisão</div><h1 class="doc-title">Mapa de fronteira de feature</h1><p class="doc-subtitle">Perguntas para classificar artefatos sem transformar heurísticas em leis.</p></header>
+<h2>Fluxo de decisão</h2><pre class="tree-box">O artefato existe por causa de uma capacidade de negócio?
+├─ não → é infraestrutura ou primitivo realmente agnóstico?
+│        ├─ sim → shared
+│        └─ não → mantenha perto do primeiro consumidor
+└─ sim → qual capacidade responde por sua mudança?
+         ├─ uma feature → mantenha dentro dela
+         ├─ conceito estável usado por capacidades diferentes → avalie entity
+         └─ colaboração entre features → componha em app/composer
+
+Depois pergunte:
+• quem é o owner?
+• quais arquivos mudam junto?
+• qual contrato externo é necessário?
+• qual ambiente executa o módulo?</pre>
+<h2>Mapa por evidência</h2><div class="rule-table-wrap"><table class="rule-table"><thead><tr><th>Evidência</th><th>Favorece</th><th>Não prova</th></tr></thead><tbody><tr><td>Arquivos mudam juntos em requisitos sucessivos</td><td>Co-localização</td><td>Nome ou granularidade final</td></tr><tr><td>Consumidores precisam do mesmo conceito estável</td><td>Entidade ou contrato compartilhado</td><td>Que toda implementação deve ser compartilhada</td></tr><tr><td>UI coordena duas capacidades</td><td>Compositor superior</td><td>Que `shared` deve conhecer o domínio</td></tr><tr><td>Artefato usa segredo ou banco</td><td>Entrada server explícita</td><td>Sua camada arquitetural</td></tr><tr><td>Somente uma rota usa o código</td><td>Manter perto da rota inicialmente</td><td>Que nunca virará feature</td></tr></tbody></table></div>
+<h2>Heurísticas contextuais</h2><div class="comparison-grid"><article class="comparison-card"><h3>Teste de remoção</h3><p>Use para listar consumidores, rotas, testes, analytics e configuração. Resultado desejado: impactos visíveis, não “zero impacto”.</p></article><article class="comparison-card"><h3>Regra de três</h3><p>Use para atrasar abstrações. Ignore quando dois consumidores já têm semânticas diferentes ou quando um contrato estável é exigido.</p></article><article class="comparison-card"><h3>Vocabulário do produto</h3><p>Use nomes reconhecidos pelo time e pelo domínio. Não force verbos ou substantivos como classificação universal.</p></article></div>
+<h2>Exemplos que dependem do contexto</h2><div class="rule-table-wrap"><table class="rule-table"><thead><tr><th>Nome</th><th>Pode ser</th><th>Pergunta útil</th></tr></thead><tbody><tr><td>`dashboard`</td><td>Rota agregadora ou domínio analítico</td><td>Há regras e roadmap próprios além da tela?</td></tr><tr><td>`settings`</td><td>Rotas, feature ou grupo de capacidades</td><td>As configurações mudam e são possuídas juntas?</td></tr><tr><td>`user`</td><td>Entidade, perfil ou administração</td><td>Estamos modelando identidade, autoatendimento ou gestão?</td></tr><tr><td>`auth`</td><td>Capacidade ampla ou fluxos separados</td><td>Sessão, login e recuperação têm o mesmo owner?</td></tr></tbody></table></div>
+<div class="callout warning"><div class="callout-title">Sinal de revisão</div><p>Se a decisão depende apenas de quantidade de arquivos, linhas ou desenvolvedores, falta evidência sobre responsabilidade e dependência.</p></div>
+<footer class="doc-footer"><span>Imprima esta página para sessões de decomposição.</span><a href="../GLOSSARY.md">Glossário</a></footer></main></body></html>

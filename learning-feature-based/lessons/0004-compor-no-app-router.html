@@ -1,0 +1,28 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Lição 0004 — Compor no App Router</title><link rel="stylesheet" href="../assets/styles.css"><script src="../assets/course.js" defer></script><script src="../assets/quiz.js" defer></script></head>
+<body data-lesson="0004" data-lesson-total="9"><main class="container"><nav class="doc-nav"><a href="./0003-desenhar-public-api.html">Anterior</a><a href="../index.html">Índice</a><a href="./0005-classificar-estado.html">Próxima</a></nav>
+<header class="doc-header"><div class="doc-badge">Lição 0004 / Composição</div><h1 class="doc-title">A rota conhece a colaboração.</h1><p class="doc-subtitle">`catalog` apresenta produto, `cart` executa a ação e a camada `app` monta os dois sem dependência lateral.</p><div class="doc-meta"><span>15–20 minutos</span><span>Resultado: composição RSC segura</span></div></header>
+<section class="reading-column"><h2>O erro a evitar</h2><pre><code>// Dentro de features/catalog — proibido pela política
+import { AddToCartButton } from '@/features/cart'</code></pre><p>Mesmo via API pública, esse import dá a `catalog` conhecimento de outra capacidade e permite ciclos futuros. O compositor já possui contexto para decidir que ação acompanha o produto.</p>
+<h2>Composição explícita</h2><pre><code>// app/catalog/page.tsx — Server Component por padrão
+import { ProductCard } from '@/features/catalog'
+import { listProducts } from '@/features/catalog/index.server'
+import { AddToCartButton } from '@/features/cart'
+
+export default async function CatalogPage() {
+  const products = await listProducts()
+
+  return products.map((product) => (
+    &lt;ProductCard
+      key={product.id}
+      product={product}
+      action={&lt;AddToCartButton productId={product.id} /&gt;}
+    /&gt;
+  ))
+}</code></pre>
+<p>`AddToCartButton` pode ser Client Component. O Server Component cria o elemento e o passa como conteúdo renderizável. Evite passar uma render function comum através de uma fronteira Server→Client; funções comuns não são serializáveis pelo React.</p>
+<div class="callout tip"><div class="callout-title">Thin route é convenção</div><p>Next.js permite fetching e UI específica em `page.tsx`. Mantemos a rota fina para tornar a colaboração visível, não porque o framework proíbe lógica ali.</p></div>
+<h2>Quando criar um compositor</h2><p>Se a mesma montagem aparece em várias rotas, extraia um módulo de camada superior, como `src/composers/catalog-with-cart`. Não o coloque em `shared`: ele conhece o domínio.</p>
+<h2>Prática</h2><div class="exercise"><div class="exercise-kicker">Fronteira dupla</div><p>Desenhe duas setas para cada import do exemplo: direção arquitetural e entrada no grafo client/server. Marque os dados que atravessam a fronteira React.</p></div><div id="quiz-4"></div>
+<h2>Fonte</h2><div class="source-card"><div class="source-content"><h4>Next.js 16 — Server and Client Components</h4><p>Referência para interleaving, serialização e `children` entre grafos.</p><a href="https://nextjs.org/docs/app/getting-started/server-and-client-components">Ler documentação</a></div></div>
+</section><footer class="doc-footer"><button class="action-button" data-complete-lesson>Marcar lição como concluída</button><a href="../reference/002-dependency-policy.html">Matriz normativa</a></footer></main>
+<script>window.addEventListener('DOMContentLoaded',()=>new QuizWidget('quiz-4',{question:'Onde deve ocorrer a montagem de ProductCard com AddToCartButton?',hint:'Qual camada já pode conhecer as duas capacidades?',answers:[{text:'Na rota ou em um compositor de camada superior.',isCorrect:true,explanation:'A camada superior conhece ambas as APIs sem criar dependência lateral entre features.'},{text:'Dentro de catalog, importando a API pública de cart.',isCorrect:false,explanation:'A API evita deep import, mas não remove a dependência lateral nem o risco de ciclo.'},{text:'Dentro de shared/ui para tornar o conjunto reutilizável.',isCorrect:false,explanation:'O conjunto conhece capacidades de negócio e contaminaria a fundação compartilhada.'}]}));</script></body></html>

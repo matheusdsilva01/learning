@@ -1,0 +1,37 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Lição 0006 — Modelar server state</title><link rel="stylesheet" href="../assets/styles.css"><script src="../assets/course.js" defer></script><script src="../assets/quiz.js" defer></script></head>
+<body data-lesson="0006" data-lesson-total="9"><main class="container"><nav class="doc-nav"><a href="./0005-classificar-estado.html">Anterior</a><a href="../index.html">Índice</a><a href="./0007-testar-com-msw.html">Próxima</a></nav>
+<header class="doc-header"><div class="doc-badge">Lição 0006 / Cache</div><h1 class="doc-title">O cache é uma réplica temporária.</h1><p class="doc-subtitle">Modele identidade e reconciliação antes de otimizar a sensação de velocidade.</p><div class="doc-meta"><span>18–25 minutos</span><span>Resultado: mutation com rollback</span></div></header>
+<section class="reading-column"><h2>Chaves descrevem dados</h2><pre><code>export const cartKeys = {
+  all: ['cart'] as const,
+  detail: (cartId: string) => [...cartKeys.all, 'detail', cartId] as const,
+}
+
+// A variável usada pela queryFn participa da identidade.
+useQuery({
+  queryKey: cartKeys.detail(cartId),
+  queryFn: () => getCart(cartId),
+})</code></pre><p>A factory centraliza convenção e inferência, mas não garante unicidade global. A equipe ainda precisa escolher raízes sem colisão.</p>
+<h2>Atualização otimista do cache</h2><pre><code>useMutation({
+  mutationFn: removeCartItem,
+  onMutate: async (itemId, context) => {
+    await context.client.cancelQueries({ queryKey: cartKeys.detail(cartId) })
+    const previous = context.client.getQueryData&lt;Cart&gt;(cartKeys.detail(cartId))
+
+    context.client.setQueryData&lt;Cart&gt;(cartKeys.detail(cartId), (current) =>
+      current ? { ...current, items: current.items.filter(i => i.id !== itemId) } : current
+    )
+    return { previous }
+  },
+  onError: (_error, _itemId, result, context) => {
+    context.client.setQueryData(cartKeys.detail(cartId), result?.previous)
+  },
+  onSettled: (_data, _error, _itemId, _result, context) =>
+    context.client.invalidateQueries({ queryKey: cartKeys.detail(cartId) }),
+})</code></pre>
+<p>Retornar a Promise da invalidação mantém a mutation pendente até o refetch terminar. Invalidar marca a query como stale e normalmente refaz queries ativas; não significa remover o cache.</p>
+<div class="callout warning"><div class="callout-title">Concorrência</div><p>Um snapshot ingênuo pode sobrescrever outra mutation simultânea. Antes de usar optimistic update em fluxos concorrentes, modele identidade (`submittedAt`), ordenação e estratégia de reconciliação.</p></div>
+<h2>Escolha a técnica menor</h2><p>Se o resultado otimista aparece em um único lugar, renderizar `mutation.variables` durante `isPending` evita alterar o cache e elimina rollback manual. Atualize o cache quando múltiplos consumidores precisam observar o resultado.</p>
+<h2>Prática</h2><div class="exercise"><div class="exercise-kicker">Falha primeiro</div><p>No laboratório, execute o teste de remoção com resposta 500. Confirme que o item reaparece e que a mensagem de erro é observável. Só então valide o caminho 200.</p><div class="lab-command"><code>npm run test</code><span>rollback</span></div></div><div id="quiz-6"></div>
+<h2>Fonte</h2><div class="source-card"><div class="source-content"><h4>TanStack Query — Optimistic Updates</h4><p>Assinaturas e fluxo usados nesta lição correspondem à documentação atual.</p><a href="https://tanstack.com/query/latest/docs/framework/react/guides/optimistic-updates">Ler documentação</a></div></div>
+</section><footer class="doc-footer"><button class="action-button" data-complete-lesson>Marcar lição como concluída</button><a href="../reference/003-state-and-testing-checklist.html">Checklist de mutation</a></footer></main>
+<script>window.addEventListener('DOMContentLoaded',()=>new QuizWidget('quiz-6',{question:'Por que `onSettled` deve retornar a invalidação no exemplo?',hint:'Observe o estado pending durante a reconciliação.',answers:[{text:'Para manter a mutation pendente até o refetch terminar.',isCorrect:true,explanation:'A Promise conecta o ciclo da mutation à reconciliação solicitada.'},{text:'Para remover definitivamente a query antiga do cache.',isCorrect:false,explanation:'Invalidação marca stale; remoção de cache é outra operação.'},{text:'Para impedir qualquer mutation concorrente na mesma feature.',isCorrect:false,explanation:'A Promise não serializa automaticamente mutations concorrentes.'}]}));</script></body></html>

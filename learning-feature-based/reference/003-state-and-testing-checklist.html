@@ -1,0 +1,22 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Referência 003 — Estado e testes</title><link rel="stylesheet" href="../assets/styles.css"></head><body><main class="container">
+<nav class="doc-nav"><a href="./002-dependency-policy.html">Anterior</a><a href="../index.html">Índice</a><a href="../lessons/0007-testar-com-msw.html">Lição 0007</a></nav>
+<header class="doc-header"><div class="doc-badge">Referência 003 / Checklist</div><h1 class="doc-title">Estado, cache e teste</h1><p class="doc-subtitle">Decisões rápidas para ownership, mutations otimistas e integração HTTP.</p></header>
+<h2>Classificar estado</h2><div class="rule-table-wrap"><table class="rule-table"><thead><tr><th>Pergunta</th><th>Se sim</th></tr></thead><tbody><tr><td>É autoridade externa e muda sem ação local?</td><td>Server state; use fetch/cache apropriado.</td></tr><tr><td>Precisa sobreviver a reload ou ser compartilhado?</td><td>URL ou persistência explícita.</td></tr><tr><td>Existe apenas para uma interação visual?</td><td>Estado local; não promova cedo.</td></tr><tr><td>Múltiplos clientes alteram simultaneamente?</td><td>Modele concorrência e reconciliação.</td></tr></tbody></table></div>
+<h2>Query key</h2><pre><code>const productKeys = {
+  all: ['products'] as const,
+  list: (filters: ProductFilters) => [...productKeys.all, 'list', filters] as const,
+  detail: (id: string) => [...productKeys.all, 'detail', id] as const,
+}</code></pre><ul><li>Array no nível superior.</li><li>Toda variável que altera a `queryFn` entra na chave.</li><li>Use prefixo sabendo que invalidação faz matching parcial por padrão.</li><li>`as const` melhora inferência; não garante unicidade global.</li></ul>
+<h2>Mutation otimista</h2><ol><li>Decida se UI por `variables` já resolve.</li><li>Cancele refetch concorrente da chave afetada.</li><li>Capture snapshot.</li><li>Atualize imutavelmente.</li><li>Retorne o snapshot de `onMutate`.</li><li>Restaure em `onError`.</li><li>Retorne a Promise de `invalidateQueries` em `onSettled`.</li><li>Teste sucesso, falha e, se relevante, concorrência.</li></ol>
+<h2>MSW 2 + Vitest</h2><pre><code>const server = setupServer(...handlers)
+
+beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
+afterEach(() => server.resetHandlers())
+afterAll(() => server.close())
+
+const handlers = [
+  http.get('/api/cart', () => HttpResponse.json(cartFixture)),
+]</code></pre>
+<h2>Teste de integração</h2><ul><li>Crie `const user = userEvent.setup()` antes da interação.</li><li>Priorize `getByRole` e nome acessível.</li><li>Espere um estado que confirme conclusão, não apenas a fase otimista.</li><li>Sobrescreva handler com `server.use` para erro específico.</li><li>Não afirme que MSW testou API, banco ou autenticação reais.</li></ul>
+<div class="callout tip"><div class="callout-title">Co-localização com limite</div><p>Teste e handler específicos podem acompanhar a feature. Setup do runner e utilitários de render continuam centrais. Remover a feature pode exigir atualizar esse ponto de integração.</p></div>
+<footer class="doc-footer"><a href="https://tanstack.com/query/latest/docs/framework/react/guides/optimistic-updates">TanStack Query</a><a href="https://mswjs.io/docs/integrations/node">MSW 2</a></footer></main></body></html>

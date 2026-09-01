@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fronteiras de Frontend — trilha prática</title>
+  <link rel="stylesheet" href="./assets/styles.css">
+  <script src="./assets/course.js" defer></script>
+</head>
+<body data-lesson-total="9">
+  <main class="container">
+    <nav class="doc-nav" aria-label="Navegação principal">
+      <strong>FIELD MANUAL / FRONTEND BOUNDARIES</strong>
+      <div class="doc-nav-group">
+        <a href="#trilha">Trilha</a>
+        <a href="#referencias">Referências</a>
+        <a href="./lab/README.md">Laboratório</a>
+      </div>
+    </nav>
+
+    <header class="doc-header hero-grid">
+      <div>
+        <div class="doc-badge">React / Next.js / TypeScript</div>
+        <h1 class="doc-title">Fronteiras que sobrevivem ao próximo requisito.</h1>
+        <p class="doc-subtitle">Uma trilha prática para transformar organização de pastas em contratos verificáveis por código, testes e grafo de dependências.</p>
+      </div>
+      <aside class="hero-aside">
+        <div class="eyebrow">Princípio central</div>
+        <p class="manifesto">A pasta comunica intenção. A API reduz superfície. A ferramenta prova a regra.</p>
+        <div class="progress-shell" aria-hidden="true"><div class="progress-bar" data-progress-bar></div></div>
+        <div class="progress-label" data-progress-label>0 de 9 lições marcadas</div>
+      </aside>
+    </header>
+
+    <section aria-labelledby="contrato">
+      <h2 id="contrato">O contrato em uma linha</h2>
+      <p>As dependências apontam para baixo; colaborações laterais são compostas acima das features.</p>
+      <div class="policy-diagram" aria-label="Direção permitida entre camadas">
+        <div class="policy-layer">app<br><span class="policy-arrow">↓</span></div>
+        <div class="policy-layer">features<br><span class="policy-arrow">↓</span></div>
+        <div class="policy-layer">entities<br><span class="policy-arrow">↓</span></div>
+        <div class="policy-layer">shared</div>
+      </div>
+      <div class="callout warning">
+        <div class="callout-title">Duas fronteiras diferentes</div>
+        <p>A camada arquitetural define quem pode depender de quem. As diretivas do React definem o grafo server/client. Uma regra não substitui a outra.</p>
+      </div>
+    </section>
+
+    <section id="trilha" aria-labelledby="trilha-title">
+      <h2 id="trilha-title">Trilha prática</h2>
+      <div class="lesson-grid">
+        <article class="lesson-card" data-lesson-card="0001"><span class="lesson-number">LIÇÃO 0001</span><h3>Diagnosticar dispersão</h3><p>Encontre motivos de mudança espalhados antes de mover arquivos.</p><a href="./lessons/0001-diagnosticar-dispersao.html">Iniciar diagnóstico</a></article>
+        <article class="lesson-card" data-lesson-card="0002"><span class="lesson-number">LIÇÃO 0002</span><h3>Delimitar uma feature</h3><p>Use responsabilidade, vocabulário e mudança conjunta sem fórmulas rígidas.</p><a href="./lessons/0002-delimitar-feature.html">Definir fronteira</a></article>
+        <article class="lesson-card" data-lesson-card="0003"><span class="lesson-number">LIÇÃO 0003</span><h3>Desenhar a API pública</h3><p>Exponha capacidade, não a estrutura interna da pasta.</p><a href="./lessons/0003-desenhar-public-api.html">Reduzir superfície</a></article>
+        <article class="lesson-card" data-lesson-card="0004"><span class="lesson-number">LIÇÃO 0004</span><h3>Compor no App Router</h3><p>Integre features sem import lateral e sem violar a fronteira RSC.</p><a href="./lessons/0004-compor-no-app-router.html">Compor módulos</a></article>
+        <article class="lesson-card" data-lesson-card="0005"><span class="lesson-number">LIÇÃO 0005</span><h3>Dar owner ao estado</h3><p>Separe estado efêmero, URL e cache remoto por ciclo de vida.</p><a href="./lessons/0005-classificar-estado.html">Classificar estado</a></article>
+        <article class="lesson-card" data-lesson-card="0006"><span class="lesson-number">LIÇÃO 0006</span><h3>Modelar server state</h3><p>Crie chaves completas e uma mutation otimista reconciliável.</p><a href="./lessons/0006-modelar-server-state.html">Trabalhar com cache</a></article>
+        <article class="lesson-card" data-lesson-card="0007"><span class="lesson-number">LIÇÃO 0007</span><h3>Testar pela fronteira HTTP</h3><p>Use Testing Library e MSW 2 para observar comportamento.</p><a href="./lessons/0007-testar-com-msw.html">Fechar o loop</a></article>
+        <article class="lesson-card" data-lesson-card="0008"><span class="lesson-number">LIÇÃO 0008</span><h3>Automatizar a política</h3><p>Converta a matriz em diagnósticos reais de lint e grafo.</p><a href="./lessons/0008-automatizar-fronteiras.html">Executar governança</a></article>
+        <article class="lesson-card" data-lesson-card="0009"><span class="lesson-number">LIÇÃO 0009</span><h3>Comparar com FSD</h3><p>Escolha granularidade e rigor por problema, não por tendência.</p><a href="./lessons/0009-comparar-com-fsd.html">Justificar decisão</a></article>
+      </div>
+    </section>
+
+    <section id="referencias" aria-labelledby="reference-title">
+      <h2 id="reference-title">Referências de campo</h2>
+      <div class="reference-grid">
+        <article class="reference-card"><h3>Mapa de fronteira</h3><p>Onde um artefato começa e quando merece extração.</p><a href="./reference/001-feature-boundary-map.html">Abrir mapa</a></article>
+        <article class="reference-card"><h3>Política de dependências</h3><p>Matriz normativa e padrões de composição.</p><a href="./reference/002-dependency-policy.html">Abrir matriz</a></article>
+        <article class="reference-card"><h3>Estado e testes</h3><p>Checklists de Query, mutation, MSW e integração.</p><a href="./reference/003-state-and-testing-checklist.html">Abrir checklist</a></article>
+        <article class="reference-card"><h3>Receitas de governança</h3><p>Configurações executadas no laboratório.</p><a href="./reference/004-governance-recipes.html">Abrir receitas</a></article>
+        <article class="reference-card"><h3>Feature-Folders ou FSD</h3><p>Comparação sem limiares arbitrários.</p><a href="./reference/005-feature-folders-vs-fsd.html">Abrir comparação</a></article>
+      </div>
+    </section>
+
+    <footer class="doc-footer">
+      <span>Conteúdo validado contra as fontes listadas em RESOURCES.md</span>
+      <a href="./MISSION.md">Ler missão</a>
+    </footer>
+  </main>
+</body>
+</html>

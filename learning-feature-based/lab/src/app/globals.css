@@ -1,0 +1,20 @@
+:root { color-scheme: light; font-family: Aptos, "Segoe UI", sans-serif; background: #f3efe4; color: #13202b; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+button { font: inherit; }
+main { margin: 0 auto; max-width: 1100px; padding: 4rem 1.25rem; }
+header { border-bottom: 3px double #8f8879; margin-bottom: 2rem; padding-bottom: 2rem; }
+h1, h2 { font-family: "Palatino Linotype", Palatino, Georgia, serif; }
+h1 { font-size: clamp(2.5rem, 7vw, 5rem); letter-spacing: -.04em; line-height: 1; margin: .4rem 0 1rem; max-width: 14ch; }
+.kicker { color: #d95d2a; font-family: "Cascadia Code", Consolas, monospace; font-size: .75rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.layout-grid { display: grid; gap: 2rem; grid-template-columns: minmax(0, 1.5fr) minmax(280px, .7fr); }
+.product-card { align-items: center; background: #fffdf7; border: 1px solid #c9c0ad; display: grid; gap: 1rem; grid-template-columns: auto 1fr auto; margin-bottom: 1rem; padding: 1rem; }
+.product-card h2 { margin: 0; }
+.product-card p { color: #4b5962; margin: .3rem 0; }
+.product-index { color: #d95d2a; font-family: "Cascadia Code", Consolas, monospace; font-size: 1.5rem; }
+.add-button, .cart-row button { background: #123c56; border: 0; color: white; cursor: pointer; padding: .6rem .8rem; }
+.cart-panel { align-self: start; background: #0e2737; color: #e9f0ec; padding: 1.25rem; position: sticky; top: 1rem; }
+.cart-panel h2 { font-size: 2rem; margin-top: 0; }
+.cart-row { align-items: center; border-bottom: 1px solid #526674; display: flex; gap: 1rem; justify-content: space-between; padding: .8rem 0; }
+.cart-row button { background: #d95d2a; }
+@media (max-width: 760px) { main { padding-top: 2rem; } .layout-grid { grid-template-columns: 1fr; } .product-card { grid-template-columns: auto 1fr; } .product-card > :last-child { grid-column: 2; } }

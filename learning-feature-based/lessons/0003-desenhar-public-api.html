@@ -1,0 +1,22 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Lição 0003 — Desenhar API pública</title><link rel="stylesheet" href="../assets/styles.css"><script src="../assets/course.js" defer></script><script src="../assets/quiz.js" defer></script></head>
+<body data-lesson="0003" data-lesson-total="9"><main class="container"><nav class="doc-nav"><a href="./0002-delimitar-feature.html">Anterior</a><a href="../index.html">Índice</a><a href="./0004-compor-no-app-router.html">Próxima</a></nav>
+<header class="doc-header"><div class="doc-badge">Lição 0003 / Contrato</div><h1 class="doc-title">Exporte capacidades, não o inventário da pasta.</h1><p class="doc-subtitle">A API pública reduz a superfície de mudança; as ferramentas impedem que consumidores a contornem.</p><div class="doc-meta"><span>12–16 minutos</span><span>Resultado: dois entry points explícitos</span></div></header>
+<section class="reading-column"><h2>O que um índice faz — e não faz</h2><p>`index.ts` oferece um endereço estável e documenta o contrato. Ele não torna outros arquivos privados no TypeScript. Sem package exports ou lint, qualquer consumidor ainda pode fazer import profundo.</p>
+<pre><code>// src/features/catalog/index.ts
+export { ProductCard } from './components/product-card'
+export type { ProductCardProps } from './components/product-card'
+
+// src/features/catalog/index.server.ts
+import 'server-only'
+export { listProducts } from './api/list-products'
+
+// Evite como política padrão:
+// export * from './components'
+// export * from './api'</code></pre>
+<h2>Por que separar servidor</h2><p>No App Router, `'use client'` define uma fronteira no grafo de módulos. Uma barrel que mistura UI cliente com acesso a banco ou segredos pode causar erro de build ou environment poisoning. `index.server.ts` torna o ambiente parte do contrato.</p>
+<div class="rule-table-wrap"><table class="rule-table"><thead><tr><th>Exporte</th><th>Mantenha interno</th></tr></thead><tbody><tr><td>Componente usado pelo compositor</td><td>Subcomponentes e estilos de implementação</td></tr><tr><td>Tipo necessário ao consumidor</td><td>DTO intermediário e schema privado</td></tr><tr><td>Comando de alto nível</td><td>Cliente HTTP e detalhes de cache</td></tr><tr><td>Loader server por entrada server</td><td>Credenciais, ORM e helpers internos</td></tr></tbody></table></div>
+<div class="callout warning"><div class="callout-title">Barrel e tree-shaking</div><p>Barrels podem afetar análise e bundles conforme ferramentas, side effects e grafo client/server. Não afirme que sempre ajudam ou sempre prejudicam; meça e mantenha exports explícitos.</p></div>
+<h2>Prática</h2><div class="exercise"><div class="exercise-kicker">Reduza a superfície</div><p>No laboratório, identifique quais exports de `catalog` são necessários pela rota e separe o loader exclusivo do servidor. Depois busque imports que contenham `/features/.../` após o nome da feature.</p><div class="lab-command"><code>npm run architecture</code><span>contrato</span></div></div><div id="quiz-3"></div>
+<h2>Fonte</h2><div class="source-card"><div class="source-content"><h4>FSD — Environment-specific Public APIs</h4><p>Documenta o problema de misturar módulos client e server em uma única entrada.</p><a href="https://feature-sliced.design/docs/reference/public-api#environment-specific-public-apis">Ler referência</a></div></div>
+</section><footer class="doc-footer"><button class="action-button" data-complete-lesson>Marcar lição como concluída</button><a href="../reference/002-dependency-policy.html">Política de imports</a></footer></main>
+<script>window.addEventListener('DOMContentLoaded',()=>new QuizWidget('quiz-3',{question:'O que realmente impede um deep import?',hint:'Diferencie documentação do contrato e enforcement.',answers:[{text:'Uma regra executada que classifica e rejeita o destino interno.',isCorrect:true,explanation:'O índice define a intenção; lint, package exports ou outra barreira executável impõem o acesso.'},{text:'A existência de um arquivo index.ts na raiz da feature.',isCorrect:false,explanation:'O compilador ainda resolve o caminho interno se nenhuma regra o proibir.'},{text:'A convenção de usar aliases iniciados pelo caractere @.',isCorrect:false,explanation:'Aliases encurtam caminhos, mas não estabelecem permissões.'}]}));</script></body></html>

@@ -1,41 +1,24 @@
-# Notas & Decisões Consolidadas do Usuário
+# Notas do workspace
 
-## 1. Perfil & Diretrizes do Workspace
-* **Stack Principal**: React / Next.js com TypeScript.
-* **Server State**: TanStack Query + URL State + Context/Zustand leve.
-* **Abordagem**: Feature-Folders Pragmático (focado em domínio, sem a sobrecarga das 6 camadas do FSD para projetos médios).
+## Preferências de aprendizagem
 
----
+- Explicações em português técnico, com o termo original em inglês apenas na primeira ocorrência.
+- Exemplos pequenos, executáveis e ligados ao mesmo domínio de e-commerce.
+- Uma decisão observável por lição.
+- Recuperação antes da explicação e nova tentativa depois do feedback.
+- Sem alegações de domínio sem teste, exercício ou justificativa produzida pelo aprendiz.
 
-## 2. Insights & Acordos Arquiteturais dos Debates
+## Política adotada
 
-### Como Definir uma Feature
-* Uma feature é um **mini-aplicativo de negócio fechado** (`UI + API + Hooks + Types + Tests`) isolado via `index.ts`.
-* **Teste da Deleção**: Se deletar a pasta, o restante do app não quebra de forma imprevisível.
-* **Regra do Cupom**:
-  * *Fase 1 (Simples)*: Cupom é apenas um input no carrinho que faz `POST /api/cart/coupon`. Vive dentro de `src/features/cart/`. As validações de negócio pertencem 100% ao backend.
-  * *Fase 2 (Evolução de Domínio)*: Se o negócio criar tela de Carteira de Cupons no Perfil e Checkout 1-Clique, o cupom é promovido para `src/features/coupons/` e exporta `CouponWallet`, `CouponInput` e `CouponSelector`.
+- `app` compõe features; uma feature não importa outra feature.
+- Features podem importar entidades e código compartilhado.
+- Uma API pública organiza o contrato, mas o linter e o grafo fazem o enforcement.
+- Código exclusivo do servidor usa uma entrada explícita, como `index.server.ts`.
+- O backend é autoritativo; validação no cliente continua útil para feedback e redução de requisições inválidas.
+- Co-localização reduz dispersão, mas não garante deleção atômica nem blast radius fixo.
 
-### Nomenclatura & Delimitação Canônica
-* **`Auth`**: ✅ Feature canônica (Login, Registro, Sessão, Tokens).
-* **`User`**: ⚠️ Modelo transversal = Entity (`entities/user`). Edição pelo usuário = `features/profile`. Gestão administrativa = `features/user-management`.
-* **`Dashboard`**: ❌ É ROTA/PÁGINA (`app/(dashboard)/page.tsx`), não feature. Apenas orquestra widgets de outras features.
-* **`Settings`**: ⚠️ Dividir em sub-rotas consumindo suas respectivas features (`settings/billing` consome `features/billing`).
+## Questões para revisitar
 
-### O Teste de Deleção e o Blast Radius (Raio de Explosão)
-* O teste de deleção **não** significa "apagar e nada quebrar como mágica".
-* Significa **ter previsibilidade total do que vai quebrar**: zero código órfão deixado para trás e apenas 1 ou 2 erros claros do TypeScript nos pontos exatos de consumo da Public API.
-
-### Como Evitar o "Código Kamehameha" (Slot Hell no JSX)
-* O uso excessivo de slots nomeados em `page.tsx` cria pirâmides profundas de indentação (`>>>>>>>>`).
-* **Mitigações**:
-  1. *Compound Components*: Estrutura linear e plana (`<Card><Card.Actions><Button /></Card.Actions></Card>`).
-  2. *Camada de Widgets/Composers*: Criar blocos integradores intermediários para blindar a `page.tsx`.
-  3. *Contexto de Escopo Local*: Componentes filhos leem dados via hook sem prop drilling de slots.
-  4. *Regra do 1 Nível de Slot*: Nunca aninhar mais de 1 nível de slot em cascata.
-
-### Pirâmide de Testes Co-localizados
-* **Testes Unitários**: Hooks puros de cálculo (`use-cart-calculations.test.ts`).
-* **Testes de Integração**: Componentes de container com MSW (`cart-drawer.test.tsx` + `testing/handlers.ts`).
-* **Testes E2E**: Na raiz `/e2e` cobrindo fluxos transacionais completos.
-* **Deleção Atômica de Testes**: Ao deletar a feature, 100% dos testes e mocks morrem junto sem quebrar o CI.
+- Quando um composer reutilizado merece uma camada própria (`widgets/` ou `composers/`)?
+- Quando separar uma capacidade ampla, como `cart`, em operações menores compensa o custo de coordenação?
+- Que exceções de importação o domínio real exige e como torná-las auditáveis?

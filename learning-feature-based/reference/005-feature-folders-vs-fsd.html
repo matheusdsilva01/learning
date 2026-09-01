@@ -1,0 +1,25 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Referência 005 — Feature-Folders vs FSD</title><link rel="stylesheet" href="../assets/styles.css"></head><body><main class="container">
+<nav class="doc-nav"><a href="./004-governance-recipes.html">Anterior</a><a href="../index.html">Índice</a><a href="../lessons/0009-comparar-com-fsd.html">Lição 0009</a></nav>
+<header class="doc-header"><div class="doc-badge">Referência 005 / Comparação</div><h1 class="doc-title">Feature-Folders ou FSD?</h1><p class="doc-subtitle">Compare unidade de decomposição, vocabulário e custo de enforcement; não use tamanho da equipe como fórmula.</p></header>
+<h2>Mapa conceitual</h2><div class="rule-table-wrap"><table class="rule-table"><thead><tr><th>Questão</th><th>Feature-Folders pragmático</th><th>FSD 2.1</th></tr></thead><tbody><tr><td>Unidade principal</td><td>Capacidade ampla do produto</td><td>Slice dentro de uma camada</td></tr><tr><td>Feature</td><td>`cart`, com UI, estado e integração</td><td>Interação relevante, como `add-to-cart`</td></tr><tr><td>Entidade</td><td>Opcional para contrato transversal</td><td>Camada formal para conceitos de domínio</td></tr><tr><td>Composição</td><td>`app` e composers conforme necessidade</td><td>`pages` e `widgets` com direção formal</td></tr><tr><td>API pública</td><td>Política local e entry points explícitos</td><td>Parte da metodologia por slice</td></tr><tr><td>Governança</td><td>Ferramentas configuradas pelo projeto</td><td>Steiger + ferramentas gerais</td></tr></tbody></table></div>
+<h2>Camadas FSD</h2><pre class="tree-box">app          inicialização e providers
+pages        telas completas
+widgets      blocos autônomos compostos
+features     interações relevantes/reutilizadas
+entities     conceitos de domínio
+shared       fundação
+
+processes    depreciada</pre><p>Nem toda camada precisa existir. Slices da mesma camada normalmente não importam umas às outras. Relações entre entities têm uma exceção explícita `@x`, usada com parcimônia.</p>
+<h2>Next.js</h2><pre><code>app/                 # diretório especial do Next.js
+  catalog/page.tsx
+src/
+  _app/              # camada FSD renomeada
+  _pages/            # camada FSD renomeada
+  widgets/
+  features/
+  entities/
+  shared/</code></pre><p>O prefixo evita confundir as camadas FSD `app/pages` com os diretórios do framework. `index.server.ts` pode separar APIs exclusivas do servidor. Isso não torna FSD e RSC a mesma arquitetura.</p>
+<h2>Use quando / evite quando</h2><div class="rule-table-wrap"><table class="rule-table"><thead><tr><th>Situação</th><th>Direção</th><th>Motivo</th></tr></thead><tbody><tr><td>Capacidades amplas estão coesas e a matriz local resolve conflitos</td><td><span class="badge-context">mantenha pragmático</span></td><td>Mais camadas não atacam um problema observado.</td></tr><tr><td>Entidades, interações e blocos compostos disputam ownership</td><td><span class="badge-context">avalie FSD</span></td><td>O vocabulário formal pode reduzir ambiguidade.</td></tr><tr><td>Desejo de “parecer enterprise”</td><td><span class="badge-deny">não adote</span></td><td>Não há critério verificável.</td></tr><tr><td>Vários times precisam da mesma direção de dependência</td><td><span class="badge-context">faça piloto</span></td><td>Valide custo de migração e enforcement.</td></tr><tr><td>Código exclusivo de uma página sem reuso</td><td><span class="badge-context">mantenha na página</span></td><td>FSD não exige transformar toda ação em feature.</td></tr></tbody></table></div>
+<h2>Roteiro de decisão</h2><ol><li>Descreva o conflito atual com exemplos.</li><li>Modele como cada abordagem o resolveria.</li><li>Compare imports, ownership, navegação e tooling.</li><li>Faça piloto em um fluxo vertical.</li><li>Registre benefícios observados e custos novos.</li></ol>
+<div class="callout warning"><div class="callout-title">Steiger</div><p>O linter oficial do FSD permanece beta. Fixe versão e combine-o com TypeScript, ESLint e validações específicas do Next.js.</p></div>
+<footer class="doc-footer"><a href="https://feature-sliced.design/docs/reference/layers">FSD Layers</a><a href="https://feature-sliced.design/docs/guides/tech/with-nextjs">FSD + Next.js</a></footer></main></body></html>

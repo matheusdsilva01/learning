@@ -1,0 +1,91 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Referência 004 — Governança</title><link rel="stylesheet" href="../assets/styles.css"></head><body><main class="container">
+<nav class="doc-nav"><a href="./003-state-and-testing-checklist.html">Anterior</a><a href="../index.html">Índice</a><a href="../lessons/0008-automatizar-fronteiras.html">Lição 0008</a></nav>
+<header class="doc-header"><div class="doc-badge">Referência 004 / Executável</div><h1 class="doc-title">Receitas de governança</h1><p class="doc-subtitle">Configuração-base validada no laboratório com JS Boundaries 7.2 e Dependency Cruiser 18.2.</p></header>
+<div class="callout warning"><div class="callout-title">Fixe versões</div><p>APIs de lint arquitetural mudam. Copie a configuração junto do `package-lock.json` e execute fixtures; não trate o snippet como prova isolada.</p></div>
+<h2>ESLint Flat Config</h2><pre><code>import tsParser from '@typescript-eslint/parser'
+import boundaries from 'eslint-plugin-boundaries'
+import { strict } from 'eslint-plugin-boundaries/config'
+
+export default [{
+  files: ['src/**/*.{ts,tsx}'],
+  languageOptions: { parser: tsParser, sourceType: 'module' },
+  plugins: { boundaries },
+  settings: {
+    ...strict.settings,
+    'boundaries/elements': [
+      { type: 'app', pattern: 'src/app', partialMatch: false },
+      { type: 'feature', pattern: 'src/features/*', capture: ['slice'], partialMatch: false },
+      { type: 'entity', pattern: 'src/entities/*', capture: ['slice'], partialMatch: false },
+      { type: 'shared', pattern: 'src/shared', partialMatch: false },
+    ],
+    'boundaries/flag-as-external': { unresolvableAlias: false },
+    'import/resolver': { typescript: { project: './tsconfig.json' } },
+  },
+  rules: {
+    ...strict.rules,
+    'boundaries/dependencies': ['error', {
+      default: 'disallow',
+      checkUnknownLocals: true,
+      checkInternals: false,
+      policies: [
+        { from: { element: { type: 'app' } }, allow: { to: [
+          { element: { type: 'feature', fileInternalPath: 'index.{ts,tsx}' } },
+          { element: { type: 'feature', fileInternalPath: 'index.server.ts' } },
+          { element: { type: 'entity', fileInternalPath: 'index.{ts,tsx}' } },
+          { element: { type: 'shared' } },
+        ] } },
+        { from: { element: { type: 'feature' } }, allow: { to: [
+          { element: { type: 'entity', fileInternalPath: 'index.{ts,tsx}' } },
+          { element: { type: 'shared' } },
+        ] } },
+        { from: { element: { type: 'entity' } }, allow: { to: [
+          { element: { type: 'shared' } },
+        ] } },
+      ],
+    }],
+  },
+}]</code></pre>
+<p>`fileInternalPath` verifica o destino resolvido. Para controlar também a grafia do specifier, combine uma regra textual como `no-restricted-imports`.</p>
+<h2>Dependency Cruiser</h2><pre><code>const config = {
+  forbidden: [
+    { name: 'no-circular', severity: 'error', from: {}, to: { circular: true } },
+    {
+      name: 'feature-dependencies',
+      severity: 'error',
+      from: { path: '^src/features/([^/]+)/' },
+      to: {
+        pathNot: [
+          '^src/features/$1/',
+          '^src/entities/[^/]+/index\\.(?:ts|tsx)$',
+          '^src/shared/',
+        ],
+        dependencyTypes: ['local', 'localmodule'],
+      },
+    },
+    {
+      name: 'entity-dependencies',
+      severity: 'error',
+      from: { path: '^src/entities/([^/]+)/' },
+      to: {
+        pathNot: ['^src/entities/$1/', '^src/shared/'],
+        dependencyTypes: ['local', 'localmodule'],
+      },
+    },
+    {
+      name: 'shared-dependencies',
+      severity: 'error',
+      from: { path: '^src/shared/' },
+      to: { pathNot: '^src/shared/', dependencyTypes: ['local', 'localmodule'] },
+    },
+  ],
+  options: {
+    includeOnly: '^src/',
+    tsConfig: { fileName: 'tsconfig.json' },
+    tsPreCompilationDeps: true,
+  },
+}
+
+export default config</code></pre>
+<h2>Fixtures mínimas</h2><div class="rule-table-wrap"><table class="rule-table"><thead><tr><th>Caso</th><th>Esperado</th></tr></thead><tbody><tr><td>`app → feature/index.ts`</td><td><span class="badge-allow">passa</span></td></tr><tr><td>`app → feature/internal.ts`</td><td><span class="badge-deny">falha</span></td></tr><tr><td>`feature A → feature B/index.ts`</td><td><span class="badge-deny">falha</span></td></tr><tr><td>`feature → entity/index.ts`</td><td><span class="badge-allow">passa</span></td></tr><tr><td>`shared → feature`</td><td><span class="badge-deny">falha</span></td></tr><tr><td>Ciclo indireto</td><td><span class="badge-deny">falha</span></td></tr></tbody></table></div>
+<h2>Limites</h2><ul><li>Arquivos fora do glob não são validados.</li><li>Imports dinâmicos construídos por string podem escapar.</li><li>A política não mede coesão, ownership ou correção de runtime.</li><li>Aliases do bundler, TypeScript e analisadores precisam resolver da mesma forma.</li></ul>
+<footer class="doc-footer"><a href="https://www.jsboundaries.dev/docs/rules/dependencies/">JS Boundaries</a><a href="https://github.com/sverweij/dependency-cruiser/blob/v18.2.0/doc/rules-tutorial.md">Dependency Cruiser</a></footer></main></body></html>
