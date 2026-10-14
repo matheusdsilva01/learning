@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Glossário de referência para hosts temporários de arquivos.">
+    <title>Glossário de file hosting</title>
+    <link rel="stylesheet" href="../assets/course.css">
+</head>
+<body>
+<div class="page">
+    <header class="masthead">
+        <strong>WaifuVault → Laravel</strong>
+        <nav aria-label="Navegação do curso">
+            <a href="../index.html">Introdução</a>
+            <a href="../lessons/0001-trace-o-ciclo-de-um-arquivo.html">Lição 01</a>
+            <a href="../lessons/0002-entenda-um-upload-privado.html">Lição 02</a>
+            <a href="../lessons/0003-valide-antes-de-aceitar.html">Lição 03</a>
+            <a href="../lessons/0004-separe-identidade-e-autoridade.html">Lição 04</a>
+            <a href="../lessons/0005-entregue-arquivos-sob-controle.html">Lição 05</a>
+            <a href="../lessons/0006-faca-o-estado-convergir.html">Lição 06</a>
+            <a href="../lessons/0007-nao-transforme-o-servidor-em-proxy.html">Lição 07</a>
+            <a href="waifuvault-system-map.html">Mapa do sistema</a>
+            <a href="checksum.html">Checksum</a>
+        </nav>
+    </header>
+
+    <div class="hero">
+        <div>
+            <p class="eyebrow">Referência viva</p>
+            <h1>Glossário de file hosting</h1>
+        </div>
+        <p class="hero-note"><strong>Como usar</strong>Consulte para recuperar uma definição precisa. As lições usam estes termos com o mesmo significado.</p>
+    </div>
+
+    <main>
+        <section>
+            <h2>Dados e identidade</h2>
+            <table class="reference-table">
+                <thead><tr><th>Termo</th><th>Definição operacional</th><th>No MVP Laravel</th></tr></thead>
+                <tbody>
+                    <tr><td><strong>Blob</strong></td><td>Sequência de bytes que constitui o conteúdo do arquivo, independente de nome ou metadados.</td><td>Objeto armazenado em um disco privado.</td></tr>
+                    <tr><td><strong>Metadados</strong></td><td>Dados sobre o blob: tamanho, MIME, nome original, caminho interno, checksum e expiração.</td><td>Linha da tabela <code>files</code>.</td></tr>
+                    <tr><td><strong>Token opaco</strong></td><td>Valor sem significado de negócio legível, geralmente aleatório, usado para localizar ou autorizar sem expor um ID sequencial.</td><td>Ser opaco não define seu poder: isso depende das operações que o aceitam.</td></tr>
+                    <tr><td><strong>Capacidade</strong></td><td>Credencial cuja posse autoriza uma operação específica, como ler ou excluir um arquivo.</td><td>A URL de leitura não deve carregar a capacidade de exclusão.</td></tr>
+                    <tr><td><strong>Bearer token</strong></td><td>Credencial em que a apresentação do valor basta para exercer a autoridade associada.</td><td>O <code>token</code> REST do arquivo autoriza consulta, alteração e exclusão sem identidade adicional.</td></tr>
+                    <tr><td><strong>Menor privilégio</strong></td><td>Princípio de conceder somente as operações e o alcance necessários para uma finalidade.</td><td>Compartilhar URL de leitura em vez de token de gestão reduz o poder transferido.</td></tr>
+                    <tr><td><strong>Revogação</strong></td><td>Encerramento da autoridade de uma credencial antes ou no fim da vida do recurso.</td><td>Álbuns removem o <code>publicToken</code> sem trocar o <code>albumToken</code> privado.</td></tr>
+                    <tr><td><strong>Checksum</strong></td><td>Resumo determinístico dos bytes, útil para comparação e detecção de duplicatas. Não substitui um token imprevisível.</td><td>No WaifuVault, é um MD5 calculado ao reler o arquivo por stream após a gravação. <a href="checksum.html">Ver guia visual</a>.</td></tr>
+                    <tr><td><strong>MIME type</strong></td><td>Classificação do formato do conteúdo, como <code>image/png</code>. O valor enviado pelo cliente não é confiável.</td><td>Detectado no servidor e armazenado como metadado.</td></tr>
+                    <tr><td><strong>Magic bytes</strong></td><td>Assinatura binária característica encontrada no conteúdo de alguns formatos.</td><td>Evidência usada antes do fallback por extensão na detecção de MIME.</td></tr>
+                    <tr><td><strong>Fail-open</strong></td><td>Política que permite continuar quando uma verificação não consegue produzir resposta conclusiva.</td><td>O WaifuVault aceita o arquivo quando não consegue determinar seu MIME.</td></tr>
+                    <tr><td><strong>Defesa em profundidade</strong></td><td>Combinação de controles independentes para que a limitação de um não elimine toda a proteção.</td><td>Tamanho, nome, MIME, antivírus, reputação e storage privado cobrem riscos diferentes.</td></tr>
+                </tbody>
+            </table>
+        </section>
+
+        <section>
+            <h2>Requisições iniciadas pelo servidor</h2>
+            <table class="reference-table">
+                <thead><tr><th>Termo</th><th>Definição operacional</th><th>Implicação</th></tr></thead>
+                <tbody>
+                    <tr><td><strong>SSRF</strong></td><td>Influência de entrada não confiável sobre uma requisição iniciada pelo servidor, permitindo alcançar destinos não autorizados.</td><td>Upload por URL precisa controlar o destino efetivamente conectado, não apenas validar o texto inicial.</td></tr>
+                    <tr><td><strong>DNS rebinding</strong></td><td>Mudança da resposta DNS entre verificações ou conexões para fazer um hostname previamente aceito apontar para outro endereço.</td><td>O endereço aprovado precisa permanecer vinculado à conexão efetiva.</td></tr>
+                    <tr><td><strong>Egress</strong></td><td>Tráfego que sai da aplicação ou de sua rede em direção a outros serviços.</td><td>Firewall ou proxy de saída pode negar redes internas independentemente da aplicação.</td></tr>
+                    <tr><td><strong>Allowlist</strong></td><td>Política que permite somente destinos previamente identificados e rejeita os demais por padrão.</td><td>É preferível quando o conjunto legítimo de serviços remotos é conhecido.</td></tr>
+                </tbody>
+            </table>
+            <p class="caption">Fonte: <a href="https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html">OWASP SSRF Prevention Cheat Sheet</a>.</p>
+        </section>
+
+        <section>
+            <h2>Ciclo de vida</h2>
+            <table class="reference-table">
+                <thead><tr><th>Termo</th><th>Definição operacional</th><th>Implicação</th></tr></thead>
+                <tbody>
+                    <tr><td><strong>TTL</strong></td><td><em>Time to live</em>: intervalo durante o qual o arquivo permanece disponível.</td><td>Produz um instante absoluto <code>expires_at</code>.</td></tr>
+                    <tr><td><strong>Expiração lógica</strong></td><td>O registro passou de <code>expires_at</code> e não deve mais ser servido, mesmo que seus bytes ainda existam.</td><td>A leitura precisa negar acesso imediatamente.</td></tr>
+                    <tr><td><strong>Limpeza física</strong></td><td>Remoção posterior do blob e dos metadados por processo agendado.</td><td>Recupera espaço, mas não define sozinha a indisponibilidade.</td></tr>
+                    <tr><td><strong>Órfão</strong></td><td>Blob sem registro correspondente, ou registro cujo blob desapareceu.</td><td>Exige reconciliação entre banco e storage.</td></tr>
+                    <tr><td><strong>Idempotência</strong></td><td>Propriedade de uma operação que pode ser repetida sem alterar novamente o resultado final.</td><td>Permite retentar limpeza quando blob ou registro já podem ter sido removidos.</td></tr>
+                    <tr><td><strong>Reconciliação</strong></td><td>Comparação periódica de estados independentes para detectar diferenças e conduzi-los ao estado desejado.</td><td>Trata blobs sem registro e registros sem blob.</td></tr>
+                    <tr><td><strong>Janela de graça</strong></td><td>Intervalo que preserva temporariamente uma diferença para evitar agir sobre uma operação ainda em andamento.</td><td>O WaifuVault aguarda cinco minutos antes de tratar um blob sem registro como órfão.</td></tr>
+                    <tr><td><strong>Quarentena</strong></td><td>Local separado cujo isolamento, retenção e expurgo precisam de políticas explícitas.</td><td>O “soft delete” do cleaner apenas move no filesystem; o snapshot não demonstra essas políticas adicionais.</td></tr>
+                    <tr><td><strong>Lock distribuído</strong></td><td>Coordenação baseada em estado compartilhado para que processos independentes disputem uma execução exclusiva.</td><td>É diferente de impedir sobreposição apenas dentro de um processo local.</td></tr>
+                    <tr><td><strong>One-time download</strong></td><td>Política que remove o arquivo após uma entrega considerada concluída.</td><td>Extensão com desafios de concorrência; fora do primeiro MVP.</td></tr>
+                </tbody>
+            </table>
+        </section>
+
+        <section>
+            <h2>Entrega HTTP</h2>
+            <table class="reference-table">
+                <thead><tr><th>Termo</th><th>Definição operacional</th></tr></thead>
+                <tbody>
+                    <tr><td><strong>Streaming</strong></td><td>Transferir bytes progressivamente sem carregar o arquivo inteiro na memória da aplicação.</td></tr>
+                    <tr><td><strong>Content-Length</strong></td><td>Em resposta com conteúdo, indica os bytes enviados; em <code>HEAD</code>, pode indicar o tamanho que um <code>GET</code> equivalente enviaria.</td></tr>
+                    <tr><td><strong>Content-Disposition</strong></td><td>Header que orienta exibição inline ou download e informa um nome ao cliente.</td></tr>
+                    <tr><td><strong>Accept-Ranges</strong></td><td>Header consultivo pelo qual o servidor anuncia suporte a unidades de faixa, como <code>bytes</code>, sem garantir toda resposta parcial futura.</td></tr>
+                    <tr><td><strong>Content-Range</strong></td><td>Header que identifica o intervalo enviado e o tamanho total da representação, ou informa o tamanho em uma resposta <code>416</code>.</td></tr>
+                    <tr><td><strong>ETag</strong></td><td>Validador de uma representação usado em requisições condicionais e cache HTTP.</td></tr>
+                    <tr><td><strong>Range request</strong></td><td>Pedido de uma faixa de bytes; uma faixa válida atendida recebe <code>206 Partial Content</code>.</td></tr>
+                    <tr><td><strong>Evento finish</strong></td><td>Sinal de que a resposta foi entregue ao transporte pelo servidor; não comprova que o cliente recebeu ou salvou todo o conteúdo.</td></tr>
+                    <tr><td><strong>Webroot</strong></td><td>Diretório que o servidor web publica diretamente. Uploads privados não devem ser gravados nele.</td></tr>
+                </tbody>
+            </table>
+            <p class="caption">Fontes: <a href="https://www.rfc-editor.org/rfc/rfc9110.html">RFC 9110</a>, <a href="https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html">OWASP File Upload Cheat Sheet</a> e <a href="https://laravel.com/docs/13.x/filesystem">Laravel File Storage</a>.</p>
+        </section>
+    </main>
+
+    <footer class="page-footer">Referência inicial do curso. Atualizar somente quando uma definição nova for necessária em mais de uma lição.</footer>
+</div>
+</body>
+</html>

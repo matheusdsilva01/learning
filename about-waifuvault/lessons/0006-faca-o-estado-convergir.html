@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Lição teórica sobre expiração, exclusão idempotente e reconciliação entre banco e storage no WaifuVault.">
+    <title>Lição 06: faça o estado convergir</title>
+    <link rel="stylesheet" href="../assets/course.css">
+    <script src="../assets/quiz.js?v=2" defer></script>
+</head>
+<body>
+<div class="page">
+    <header class="masthead">
+        <strong>WaifuVault → Laravel</strong>
+        <nav aria-label="Navegação do curso">
+            <a href="../index.html">Introdução</a>
+            <a href="0005-entregue-arquivos-sob-controle.html">Lição 05</a>
+            <a href="0007-nao-transforme-o-servidor-em-proxy.html">Lição 07</a>
+            <a href="#exclusao">Exclusão</a>
+            <a href="#matriz">Matriz</a>
+            <a href="#cleaner">Cleaner</a>
+            <a href="#concorrencia">Concorrência</a>
+            <a href="#revisao">Revisão</a>
+            <a href="../reference/glossary.html">Glossário</a>
+        </nav>
+    </header>
+
+    <div class="hero">
+        <div>
+            <p class="eyebrow">Lição 06 · 25 minutos</p>
+            <h1>Faça o estado convergir</h1>
+        </div>
+        <p class="hero-note"><strong>Vitória concreta</strong>Ao final, você conseguirá observar registro, blob e falha parcial para escolher uma ação repetível que preserve a indisponibilidade e recupere a consistência.</p>
+    </div>
+
+    <main>
+        <section>
+            <p class="kicker">Introdução</p>
+            <h2>O cron recupera espaço; não define autorização</h2>
+            <p class="lede">O prazo armazenado decide quando a capacidade deixa de funcionar. O cleaner é um mecanismo posterior de manutenção: remove estado vencido e corrige diferenças entre banco e filesystem.</p>
+            <p>No WaifuVault, <code>expires</code> é um timestamp em milissegundos; <code>null</code> significa ausência de expiração. A leitura considera expirado quando o tempo restante é menor ou igual a zero. O job busca periodicamente registros com prazo menor que o instante atual.</p>
+            <div class="callout warning">
+                <p><strong>Invariante de segurança:</strong> atraso ou falha na limpeza nunca deve prolongar o acesso. O registro e o blob podem ainda existir, mas a rota de leitura precisa negar o arquivo vencido.</p>
+            </div>
+            <p>Há uma diferença de fronteira no snapshot: a leitura usa <code>expires &lt;= agora</code>, enquanto a consulta do cleaner usa <code>expires &lt; agora</code>. No instante exato de igualdade, o recurso já está indisponível, mas será selecionado para limpeza quando o relógio avançar.</p>
+        </section>
+
+        <section id="exclusao">
+            <p class="kicker">Duas escritas independentes</p>
+            <h2>Excluir continua sendo um workflow entre sistemas</h2>
+            <p>Uma transação SQL não inclui o filesystem. Qualquer ordem deixa uma janela em que somente metade da exclusão terminou. O desenho precisa escolher qual estado parcial aceita e como uma execução futura o corrige.</p>
+            <table class="reference-table">
+                <thead><tr><th>Ordem</th><th>Segunda etapa falha</th><th>Estado resultante</th></tr></thead>
+                <tbody>
+                    <tr><td>Remover blob → remover registro</td><td>Banco não remove o registro.</td><td>Registro órfão aponta para bytes ausentes.</td></tr>
+                    <tr><td>Remover registro → remover blob</td><td>Filesystem não remove o blob.</td><td>Blob órfão ocupa storage sem metadados.</td></tr>
+                </tbody>
+            </table>
+            <p>A exclusão de arquivo individual do WaifuVault tenta remover o blob primeiro e depois o registro. Já a exclusão de bucket e a exclusão de álbum com <code>removeFiles=true</code> removem estado do banco em transação antes de apagar os blobs. Nenhuma das ordens cria atomicidade entre os dois sistemas.</p>
+            <h3>Idempotência torna repetição segura</h3>
+            <p>Uma ação idempotente pode ser repetida sem produzir um resultado final diferente. Para limpeza, “garanta que este blob não existe” é mais recuperável que “falhe se alguém já o removeu”. Da mesma forma, remover um registro que já não existe deve ser tratado conscientemente como estado alcançado, não como corrupção nova.</p>
+            <div class="callout">
+                <p><strong>Convergência:</strong> cada repetição reduz diferenças até banco e storage representarem o mesmo estado desejado. Idempotência permite repetir; observabilidade informa o que ainda não convergiu.</p>
+            </div>
+        </section>
+
+        <section id="matriz">
+            <p class="kicker">Reconciliação</p>
+            <h2>Compare presença dos dois lados antes de agir</h2>
+            <table class="reference-table">
+                <thead><tr><th>Registro</th><th>Blob</th><th>Leitura</th><th>Ação de reconciliação</th></tr></thead>
+                <tbody>
+                    <tr><td>Existe e está ativo</td><td>Existe</td><td>Permitida conforme as demais regras.</td><td>Nenhuma.</td></tr>
+                    <tr><td>Existe e expirou</td><td>Existe</td><td>Negada imediatamente.</td><td>Remover ambos de forma repetível.</td></tr>
+                    <tr><td>Existe</td><td>Ausente</td><td>Negada.</td><td>Remover registro e derivados órfãos.</td></tr>
+                    <tr><td>Ausente</td><td>Existe</td><td>Sem capacidade pública válida.</td><td>Após proteção contra uploads ativos, mover para diretório separado ou remover.</td></tr>
+                    <tr><td>Ausente</td><td>Ausente</td><td>Negada.</td><td>Nenhuma; o estado já convergiu.</td></tr>
+                </tbody>
+            </table>
+            <p><a href="../source/WaifuVault/src/services/FileCleaner.ts"><code>FileCleaner.sync()</code></a> lê todos os registros e todas as entradas do diretório, cria dois conjuntos de nomes e encontra as diferenças. Registro sem blob segue para <code>processDelete()</code>. Blob sem registro segue para remoção ou movimentação a um diretório separado.</p>
+            <p>No código, “soft delete” não é uma coluna <code>deleted_at</code> nem um estado restaurável no banco. Para órfãos de disco, significa mover o blob para outro diretório quando <code>SOFT_DELETE_LOCATION</code> está configurado; sem essa configuração, a operação vira exclusão física. O snapshot não demonstra expurgo posterior nem controles adicionais de quarentena nesse destino.</p>
+            <div class="callout warning">
+                <p><strong>Snapshot não é verdade instantânea.</strong> Entre listar o banco e listar o diretório, um upload pode gravar o blob e ainda não ter persistido o registro. Remover toda diferença imediatamente destruiria trabalho válido em andamento.</p>
+            </div>
+        </section>
+
+        <section id="cleaner">
+            <p class="kicker">No código original</p>
+            <h2>Uma janela de graça reduz falsos órfãos</h2>
+            <p>O upload grava diretamente no diretório final antes de criar o registro. Para não apagar imediatamente um blob nessa janela, o cleaner ignora entradas sem registro cujo <code>mtime</code> tenha menos de cinco minutos.</p>
+            <ol class="flow" aria-label="Reconciliação de blob sem registro">
+                <li><strong>Listar</strong>Obtém snapshots completos do banco e diretório.</li>
+                <li><strong>Comparar</strong>Encontra blob cujo nome não aparece no banco.</li>
+                <li><strong>Medir</strong>Consulta quando a entrada foi modificada.</li>
+                <li><strong>Aguardar</strong>Preserva diferenças com menos de cinco minutos.</li>
+                <li><strong>Convergir</strong>Depois da graça, move ou remove o órfão.</li>
+            </ol>
+            <p>A janela é uma heurística, não uma prova de propriedade. Um upload pausado ou um processamento longo pode ultrapassá-la antes da persistência. Uma alternativa mais explícita seria escrever primeiro em namespace temporário ou manter um lease de upload ativo.</p>
+            <h3>Quando e onde executa</h3>
+            <p>O método <code>$onReady()</code> executa no ciclo de inicialização e também é registrado com cron padrão <code>0 * * * *</code>. Em cada rodada, tenta remover expirados, sincronizar banco/disco e remover duplicatas; cada etapa possui seu próprio <code>try/catch</code>. Outra rotina procura duplicatas a cada minuto.</p>
+            <p>O decorator <a href="../source/WaifuVault/src/model/di/decorators/RunEvery.ts"><code>RunEvery</code></a> usa <code>preventOverrun</code> para impedir que a mesma instância local do job se sobreponha. A função <code>isSchedulerLeader()</code> permite somente a instância PM2 de índice zero; fora desse contexto, todo processo sem índice se considera líder.</p>
+            <div class="callout warning">
+                <p><strong>Isso não é lock distribuído.</strong> Dois containers ou hosts independentes podem executar o cleaner. Além disso, o job horário e o job de duplicatas possuem locks locais separados e podem alcançar <code>removeDupes()</code> ao mesmo tempo.</p>
+            </div>
+        </section>
+
+        <section id="concorrencia">
+            <p class="kicker">Falhas operacionais</p>
+            <h2>Repetível também precisa ser limitado e observável</h2>
+            <div class="system-grid">
+                <article class="system-card">
+                    <h3>Onda de expiração</h3>
+                    <p>O cleaner carrega todos os expirados e dispara remoções de blobs em um único <code>Promise.all</code>, sem paginação nem limite de concorrência.</p>
+                </article>
+                <article class="system-card">
+                    <h3>Erro engolido</h3>
+                    <p>A remoção em disco captura a rejeição agregada. Só registra <code>EPERM</code>; outras falhas podem não impedir a exclusão posterior do banco.</p>
+                </article>
+                <article class="system-card">
+                    <h3>Retry indireto</h3>
+                    <p>Não há fila durável ou checkpoint por item. A recuperação depende da próxima execução e da reconciliação detectar o órfão restante.</p>
+                </article>
+                <article class="system-card">
+                    <h3>Leitura concorrente</h3>
+                    <p>A aplicação verifica existência e abre o arquivo depois. Uma exclusão pode vencer entre as duas operações.</p>
+                </article>
+                <article class="system-card">
+                    <h3>Duplicatas</h3>
+                    <p>A rotina remove registros duplicados diretamente no banco. Os blobs correspondentes viram órfãos até uma sincronização posterior.</p>
+                </article>
+                <article class="system-card">
+                    <h3>Resultado por item</h3>
+                    <p>Sem sucesso ou falha individual, um lote grande dificulta retry seletivo, métricas e investigação operacional.</p>
+                </article>
+            </div>
+            <p>Um lock reduz trabalho concorrente, mas não corrige essas propriedades. Ainda são necessários lotes limitados, ações idempotentes, registro de resultado por item e uma estratégia explícita de retry.</p>
+        </section>
+
+        <section>
+            <p class="kicker">Tradução futura</p>
+            <h2>O MVP Laravel precisa prometer convergência, não simultaneidade</h2>
+            <table class="comparison">
+                <thead><tr><th>Decisão</th><th>Primeiro MVP</th></tr></thead>
+                <tbody>
+                    <tr><td>Autorização</td><td>A rota nega <code>expires_at &lt;= now()</code> sem depender do scheduler.</td></tr>
+                    <tr><td>Limpeza</td><td>Um command seleciona expirados em lotes limitados e registra falhas por arquivo.</td></tr>
+                    <tr><td>Repetição</td><td>Blob ou registro já ausente conta como estado final aceitável.</td></tr>
+                    <tr><td>Controle de sobreposição</td><td><code>withoutOverlapping()</code> usa lock no cache; seu alcance depende de o cache ser local ou compartilhado.</td></tr>
+                    <tr><td>Executor por ocorrência</td><td><code>onOneServer()</code> elege um servidor usando cache compartilhado compatível.</td></tr>
+                    <tr><td>Reconciliação</td><td>Rotina separada compara estados e trata diferenças com política conservadora.</td></tr>
+                </tbody>
+            </table>
+            <p><code>withoutOverlapping()</code> impede nova execução enquanto o lock está ativo e pode coordenar servidores quando todos usam o mesmo cache. <code>onOneServer()</code> elege um executor para cada ocorrência e requer cache compartilhado com driver <code>database</code>, <code>memcached</code>, <code>dynamodb</code> ou <code>redis</code>. Nenhum deles transforma SQL e filesystem em uma única transação.</p>
+            <p class="caption">Fonte recomendada: <a href="https://laravel.com/docs/13.x/scheduling#preventing-task-overlaps">Laravel 13, Preventing Task Overlaps</a> e <a href="https://laravel.com/docs/13.x/scheduling#running-tasks-on-one-server">Running Tasks on One Server</a>.</p>
+        </section>
+
+        <section id="revisao">
+            <p class="kicker">Recuperação ativa</p>
+            <h2>Escolha uma ação que possa ser repetida</h2>
+            <div class="quiz"
+                 data-quiz
+                 data-correct-feedback="Correto. Sem registro, a aplicação não reconhece uma capacidade ativa para o blob; removê-lo repetidamente conduz ao estado ausente nos dois lados."
+                 data-incorrect-feedback="Ainda não. Determine o estado desejado e evite recriar autoridade a partir de um blob isolado.">
+                <h3>Após a janela de segurança, o cleaner encontra um blob sem registro. Qual ação faz o estado convergir sem recriar autoridade?</h3>
+                <div class="quiz-options">
+                    <button type="button" data-answer data-correct="true" aria-pressed="false">Mover blob órfão para diretório separado ou removê-lo idempotentemente depois</button>
+                    <button type="button" data-answer data-feedback="O blob isolado não contém metadados suficientes para recriar uma capacidade legítima." aria-pressed="false">Recriar um registro público usando somente o nome físico encontrado</button>
+                    <button type="button" data-answer data-feedback="Ausência de registro não justifica consumo permanente de storage sem política." aria-pressed="false">Manter o blob indefinidamente porque nenhuma transação registrou sua criação</button>
+                    <button type="button" data-answer data-feedback="Publicar o diretório contorna autorização e transforma um órfão em exposição." aria-pressed="false">Publicar diretamente o diretório para algum cliente identificar seu proprietário</button>
+                </div>
+                <p class="quiz-feedback" data-feedback aria-live="polite">Escolha uma alternativa para receber feedback.</p>
+            </div>
+
+            <div class="callout">
+                <h3>Explique sem consultar a lição</h3>
+                <p>Responda ao agente:</p>
+                <p><strong>1.</strong> Por que o cleaner não pode definir quando o acesso expira?<br><strong>2.</strong> Que órfão surge quando o blob é removido, mas a exclusão do banco falha?<br><strong>3.</strong> Por que repetir uma exclusão idempotente ajuda na recuperação?<br><strong>4.</strong> O que a janela de cinco minutos tenta proteger e por que ela é apenas uma heurística?<br><strong>5.</strong> Por que <code>preventOverrun</code> local não substitui um lock distribuído?</p>
+            </div>
+        </section>
+
+        <section>
+            <p class="kicker">Resumo de bolso</p>
+            <h2>O que precisa permanecer</h2>
+            <ul class="checklist">
+                <li>Validade lógica encerra acesso; limpeza física recupera recursos depois.</li>
+                <li>SQL e filesystem não participam da mesma transação.</li>
+                <li>Toda ordem de exclusão precisa prever falha da etapa seguinte.</li>
+                <li>Idempotência permite retry; reconciliação conduz estados parciais à convergência.</li>
+                <li>Snapshots exigem proteção contra operações legítimas ainda em andamento.</li>
+                <li>Lock local não coordena processos independentes em outros servidores.</li>
+                <li>Lotes limitados e resultados por item tornam falhas recuperáveis e observáveis.</li>
+            </ul>
+            <div class="next-step">
+                <strong>Próximo tópico teórico:</strong> a <a href="0007-nao-transforme-o-servidor-em-proxy.html">Lição 07</a> trata upload por URL como requisição iniciada pelo servidor e sua superfície de SSRF.
+                <p>Antes de seguir, envie ao agente suas respostas da revisão. Para cada falha, descreva também qual execução futura deve corrigir o estado.</p>
+            </div>
+        </section>
+    </main>
+
+    <footer class="page-footer">Lição baseada em <code>FileCleaner</code>, <code>FileService</code>, <code>FileDao</code> e <code>RunEvery</code> no commit <code>5f5e94b</code>, com referência ao scheduler do Laravel 13.</footer>
+</div>
+</body>
+</html>

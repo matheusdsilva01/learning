@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Lição teórica sobre entrega HTTP controlada, streaming e requisições de faixa no WaifuVault.">
+    <title>Lição 05: entregue arquivos sob controle</title>
+    <link rel="stylesheet" href="../assets/course.css">
+    <script src="../assets/quiz.js?v=2" defer></script>
+</head>
+<body>
+<div class="page">
+    <header class="masthead">
+        <strong>WaifuVault → Laravel</strong>
+        <nav aria-label="Navegação do curso">
+            <a href="../index.html">Introdução</a>
+            <a href="0004-separe-identidade-e-autoridade.html">Lição 04</a>
+            <a href="#decisao">Decisão</a>
+            <a href="#headers">Headers</a>
+            <a href="#streaming">Streaming</a>
+            <a href="#ranges">Ranges</a>
+            <a href="#revisao">Revisão</a>
+            <a href="../reference/glossary.html">Glossário</a>
+        </nav>
+    </header>
+
+    <div class="hero">
+        <div>
+            <p class="eyebrow">Lição 05 · 25 minutos</p>
+            <h1>Entregue arquivos sob controle</h1>
+        </div>
+        <p class="hero-note"><strong>Vitória concreta</strong>Ao final, você conseguirá decidir se o servidor deve negar, transmitir tudo ou transmitir apenas uma faixa, com status e headers coerentes.</p>
+    </div>
+
+    <main>
+        <section>
+            <p class="kicker">Introdução</p>
+            <h2>Autorizar leitura não significa publicar o diretório</h2>
+            <p class="lede">Uma capacidade de leitura leva a requisição até a aplicação. A aplicação ainda precisa resolver o registro, aplicar o estado atual e construir uma resposta HTTP que represente corretamente os bytes entregues.</p>
+            <p>Se o servidor web expusesse diretamente o diretório de uploads, poderia entregar um blob sem consultar expiração, senha ou existência dos metadados. O storage privado força toda leitura a passar pela mesma fronteira de decisão.</p>
+            <div class="callout warning">
+                <p><strong>Regra estrutural:</strong> primeiro decida se a leitura ainda é permitida; somente depois abra o blob. Saber o caminho interno não deve contornar as regras do domínio.</p>
+            </div>
+        </section>
+
+        <section id="decisao">
+            <p class="kicker">Antes dos bytes</p>
+            <h2>A rota transforma estado persistido em uma decisão atual</h2>
+            <p>No WaifuVault, <a href="../source/WaifuVault/src/controllers/serve/FileServerController.ts"><code>FileServerController.getFile()</code></a> recebe <code>/f/{fileName}/{originalName?}</code>. A busca não deriva o caminho do nome original fornecido pelo cliente: resolve o registro pelo nome interno gerado e só então obtém a localização do blob.</p>
+            <ol class="flow" aria-label="Decisão de entrega de um arquivo">
+                <li><strong>Resolver</strong>Localiza o registro pelo <code>fileName</code> interno.</li>
+                <li><strong>Conferir</strong>Se veio na URL, o nome original precisa corresponder.</li>
+                <li><strong>Vigorar</strong>Arquivo expirado já não pode ser entregue.</li>
+                <li><strong>Existir</strong>O blob precisa continuar presente no disco.</li>
+                <li><strong>Autorizar</strong>Se protegido, a senha precisa ser válida.</li>
+            </ol>
+            <p><a href="../source/WaifuVault/src/services/FileService.ts"><code>FileService.getEntry()</code></a> responde como não encontrado quando o registro não existe, o nome visível diverge, o prazo terminou ou o blob desapareceu. Nos dois últimos casos, tenta também excluir o estado restante.</p>
+            <div class="callout">
+                <p><strong>Expiração lógica vem primeiro.</strong> A limpeza pode falhar ou ocorrer depois, mas isso não prolonga a autorização. Um blob expirado que ainda ocupa disco continua indisponível.</p>
+            </div>
+            <p>Há uma nuance no snapshot: a verificação preliminar de proteção acontece antes dessas verificações completas. Por isso, um arquivo protegido, expirado e solicitado sem senha pode produzir <code>403</code> antes de chegar ao caminho que produziria <code>404</code> e tentaria a limpeza. Isso descreve a implementação observada, não uma ordem obrigatória para o MVP.</p>
+        </section>
+
+        <section id="headers">
+            <p class="kicker">Contrato da representação</p>
+            <h2>Headers descrevem os bytes que realmente seguem</h2>
+            <p>Depois de autorizar, o servidor não devolve apenas um fluxo indistinto. Status e headers dizem ao cliente como interpretar o conteúdo, qual quantidade esperar e se recebeu a representação inteira ou apenas uma parte.</p>
+            <table class="reference-table">
+                <thead><tr><th>Elemento</th><th>Papel</th><th>No WaifuVault</th></tr></thead>
+                <tbody>
+                    <tr><td><code>Content-Type</code></td><td>Classifica a representação entregue.</td><td>Usa o MIME persistido; sem valor, usa <code>application/octet-stream</code>.</td></tr>
+                    <tr><td><code>Content-Length</code></td><td>Em resposta com conteúdo, informa quantos bytes foram enviados. Em <code>HEAD</code>, pode indicar o tamanho que um <code>GET</code> equivalente enviaria.</td><td>Usa o tamanho total no <code>200</code> ou o tamanho da faixa no <code>206</code>.</td></tr>
+                    <tr><td><code>Content-Disposition</code></td><td>Orienta exibição ou download e pode sugerir um nome.</td><td><code>?download=true</code> define <code>attachment</code> com o nome de apresentação.</td></tr>
+                    <tr><td><code>Accept-Ranges</code></td><td>Anuncia de forma consultiva suporte a unidades de faixa; não garante que toda requisição futura será parcial.</td><td>Anuncia <code>bytes</code> para áudio e vídeo.</td></tr>
+                    <tr><td><code>Content-Range</code></td><td>Descreve os limites e o tamanho total da representação.</td><td>Acompanha respostas parciais válidas.</td></tr>
+                </tbody>
+            </table>
+            <p>O <code>Content-Type</code> vem da classificação feita no upload, não da extensão digitada na URL de leitura. O nome original é apresentação; não deve escolher o tipo nem o caminho interno.</p>
+            <p>O código de entrega não define explicitamente <code>Cache-Control</code>, <code>ETag</code> ou <code>Last-Modified</code>. Portanto, esta revisão não declara uma política própria de cache nem implementa requisições condicionais. Para recursos privados, protegidos ou temporários, deixar esse contrato implícito transfere comportamento para framework, navegador, proxy e configuração de deploy.</p>
+        </section>
+
+        <section id="streaming">
+            <p class="kicker">Uso de memória</p>
+            <h2>Transmitir progressivamente é diferente de carregar tudo</h2>
+            <p>Um stream lê e encaminha partes sucessivas do arquivo. Um buffer completo precisa reservar memória proporcional ao tamanho total antes de concluir o processamento. Essa diferença permanece mesmo quando ambos produzem um único download para o cliente.</p>
+            <div class="system-grid">
+                <article class="system-card">
+                    <h3>Arquivo comum</h3>
+                    <p><code>EntryEncryptionWrapper.getStream()</code> abre o arquivo e retorna um <code>ReadStream</code>. O conteúdo pode avançar por partes.</p>
+                </article>
+                <article class="system-card">
+                    <h3>Arquivo criptografado</h3>
+                    <p>A implementação lê e descriptografa todo o conteúdo para um <code>Buffer</code> antes de responder.</p>
+                </article>
+                <article class="system-card">
+                    <h3>Frontend protegido</h3>
+                    <p>A página <code>/p</code> acumula os chunks em um <code>Blob</code>; o navegador também mantém o arquivo completo.</p>
+                </article>
+            </div>
+            <p>Chamar uma API de stream não garante memória limitada se uma etapa anterior já materializou todo o conteúdo. É necessário observar o caminho completo, da leitura do disco até a escrita da resposta.</p>
+            <div class="callout warning">
+                <p><strong>Para o MVP Laravel:</strong> arquivos comuns devem sair do disco privado por resposta mediada e progressiva. Criptografia por senha está fora do escopo inicial, então não precisamos reproduzir a bufferização observada.</p>
+            </div>
+        </section>
+
+        <section id="ranges">
+            <p class="kicker">Entrega parcial</p>
+            <h2>Range permite pedir intervalos específicos de bytes</h2>
+            <p>Players de áudio e vídeo usam requisições de faixa para iniciar em outro ponto sem baixar tudo antes. O cliente envia, por exemplo, <code>Range: bytes=1000-1999</code>. O servidor pode ignorar <code>Range</code> e responder com a representação completa; se optar por processar uma faixa satisfazível, responde com <code>206 Partial Content</code>.</p>
+            <pre><code>HTTP/1.1 206 Partial Content
+Content-Type: video/mp4
+Accept-Ranges: bytes
+Content-Range: bytes 1000-1999/5000000
+Content-Length: 1000</code></pre>
+            <table class="comparison">
+                <thead><tr><th>Situação</th><th>Status</th><th>Conteúdo esperado</th></tr></thead>
+                <tbody>
+                    <tr><td>Representação completa</td><td><code>200 OK</code></td><td>Todos os bytes.</td></tr>
+                    <tr><td>Servidor processa e atende uma faixa válida</td><td><code>206 Partial Content</code></td><td>Somente o intervalo descrito por <code>Content-Range</code>.</td></tr>
+                    <tr><td>Servidor processa, mas nenhuma faixa é satisfazível</td><td><code>416 Range Not Satisfiable</code></td><td>Sem a representação; deveria indicar <code>Content-Range: bytes */tamanho</code>.</td></tr>
+                </tbody>
+            </table>
+            <p>Os limites são inclusivos: de 1000 a 1999 existem mil bytes. Segundo a <a href="https://www.rfc-editor.org/rfc/rfc9110.html#name-byte-ranges">RFC 9110</a>, <code>bytes=1000-</code> significa do byte 1000 até o fim, enquanto <code>bytes=-500</code> pede os últimos 500 bytes.</p>
+            <div class="callout warning">
+                <p><strong>Padrão e snapshot divergem.</strong> O parser do WaifuVault limita uma faixa aberta a aproximadamente 1 MB e interpreta uma faixa de sufixo como começando em zero. Também responde <code>416</code> sem o <code>Content-Range</code> com tamanho total. Esses são limites do código estudado, não regras HTTP a copiar.</p>
+            </div>
+            <p>A revisão só processa <code>Range</code> para áudio ou vídeo não criptografado e que não seja de acesso único. Porém, anuncia <code>Accept-Ranges: bytes</code> para todo áudio ou vídeo, inclusive quando essas condições impedem a resposta parcial. Como o header é consultivo, isso não viola por si só a RFC: o cliente precisa tolerar uma resposta completa. Ainda assim, omiti-lo quando a representação previsivelmente nunca atenderá faixas reduz expectativas desnecessárias.</p>
+            <p class="caption">Fonte normativa: <a href="https://www.rfc-editor.org/rfc/rfc9110.html#section-14">RFC 9110, seção 14</a>. Visão prática: <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Range_requests">MDN, HTTP range requests</a>.</p>
+        </section>
+
+        <section>
+            <p class="kicker">Depois dos bytes</p>
+            <h2>Resposta finalizada não significa arquivo consumido</h2>
+            <p>Nos ramos comuns de resposta completa que chamam <code>commitEntryResponse()</code>, o WaifuVault registra um listener de <code>finish</code>. Depois desse evento, incrementa visualizações ou exclui um arquivo marcado para acesso único. O evento informa que o servidor entregou a resposta ao transporte; não prova que o cliente recebeu, salvou ou visualizou todos os bytes.</p>
+            <p>Também existe uma janela concorrente: duas requisições podem autorizar e abrir o mesmo arquivo antes que a primeira resposta termine e dispare a exclusão. Portanto, o comportamento de acesso único é melhor esforço, não uma garantia atômica de exatamente uma leitura.</p>
+            <p>O caminho de <code>Range</code> não chama esse pós-processamento e, por isso, não incrementa visualizações. Isso inclui seu fallback: um header não reconhecido pode receber o arquivo completo com <code>200</code> e ainda escapar do pós-processamento. Arquivos de acesso único são excluídos desse caminho, mas a diferença mostra que efeitos de domínio não devem depender acidentalmente do ramo usado para escrever HTTP.</p>
+            <div class="callout">
+                <p><strong>Limite do MVP:</strong> acesso único permanece fora do primeiro recorte. Quando entrar, exigirá um estado de reserva ou consumo com tratamento explícito de concorrência; um callback após a resposta não basta para prometer exatamente uma entrega.</p>
+            </div>
+        </section>
+
+        <section>
+            <p class="kicker">Tradução futura</p>
+            <h2>O contrato mínimo para Laravel já pode ser definido</h2>
+            <table class="comparison">
+                <thead><tr><th>Decisão</th><th>Primeiro MVP</th></tr></thead>
+                <tbody>
+                    <tr><td>Localização pública</td><td>Resolver <code>public_id</code> opaco no banco; nunca aceitar caminho de disco do cliente.</td></tr>
+                    <tr><td>Validade</td><td>Negar imediatamente quando <code>expires_at</code> passou, mesmo antes da limpeza física.</td></tr>
+                    <tr><td>Storage</td><td>Manter o blob em disco privado e entregar somente por rota da aplicação.</td></tr>
+                    <tr><td>Transferência</td><td>Usar resposta de arquivo ou download com streaming fornecida pelo framework.</td></tr>
+                    <tr><td>Metadados HTTP</td><td>Enviar MIME detectado, tamanho coerente e nome de apresentação seguro.</td></tr>
+                    <tr><td>Ranges</td><td>Testar o comportamento do framework antes de prometer suporte; não criar parser parcial improvisado.</td></tr>
+                </tbody>
+            </table>
+            <p>A documentação de <a href="https://laravel.com/docs/13.x/responses#file-downloads">respostas HTTP do Laravel</a> apresenta respostas de arquivo e download. Escolher a API concreta pertence à fase prática; o requisito teórico é preservar a mediação e o contrato observável.</p>
+        </section>
+
+        <section id="revisao">
+            <p class="kicker">Recuperação ativa</p>
+            <h2>Faça status, headers e bytes concordarem</h2>
+            <div class="quiz"
+                 data-quiz
+                 data-correct-feedback="Correto. Uma faixa válida recebe 206, descreve o intervalo e envia somente aqueles bytes."
+                 data-incorrect-feedback="Ainda não. Compare a representação completa, a parcial e uma faixa impossível.">
+                <h3>O cliente pede Range: bytes=1000-1999 e o servidor aceita a faixa. Qual resposta mantém o contrato HTTP coerente?</h3>
+                <div class="quiz-options">
+                    <button type="button" data-answer data-correct="true" aria-pressed="false">Responder 206 com Content-Range e transmitir somente os bytes solicitados</button>
+                    <button type="button" data-answer data-feedback="Status 200 representa a resposta completa, não uma faixa atendida." aria-pressed="false">Responder 200 com Content-Length total e transmitir o arquivo completo</button>
+                    <button type="button" data-answer data-feedback="A faixa altera a representação solicitada; não altera a localização do recurso." aria-pressed="false">Responder 404 porque requisições parciais não localizam arquivos no storage</button>
+                    <button type="button" data-answer data-feedback="Status 416 representa uma faixa não satisfazível, não uma faixa válida." aria-pressed="false">Responder 416 com Content-Disposition e transmitir somente o nome original</button>
+                </div>
+                <p class="quiz-feedback" data-feedback aria-live="polite">Escolha uma alternativa para receber feedback.</p>
+            </div>
+
+            <div class="callout">
+                <h3>Explique sem consultar a lição</h3>
+                <p>Responda ao agente:</p>
+                <p><strong>1.</strong> Por que storage privado exige uma rota mediada pela aplicação?<br><strong>2.</strong> Por que a leitura deve negar um arquivo expirado antes da limpeza física?<br><strong>3.</strong> Qual é a diferença de memória entre stream e buffer completo?<br><strong>4.</strong> Quando usar <code>200</code>, <code>206</code> e <code>416</code>?<br><strong>5.</strong> Por que o evento <code>finish</code> não comprova que o cliente salvou o arquivo?</p>
+            </div>
+        </section>
+
+        <section>
+            <p class="kicker">Resumo de bolso</p>
+            <h2>O que precisa permanecer</h2>
+            <ul class="checklist">
+                <li>A aplicação autoriza antes de abrir e transmitir o blob privado.</li>
+                <li>Expiração lógica encerra acesso mesmo quando a limpeza física atrasou.</li>
+                <li>Headers precisam descrever exatamente os bytes desta resposta.</li>
+                <li>Streaming progressivo evita memória proporcional ao arquivo no caminho comum.</li>
+                <li><code>200</code> entrega tudo; <code>206</code> entrega uma faixa; <code>416</code> rejeita faixa impossível.</li>
+                <li>Finalizar a escrita no transporte não prova consumo pelo cliente.</li>
+                <li>O comportamento observado no projeto deve ser comparado ao padrão antes de ser reproduzido.</li>
+            </ul>
+            <div class="next-step">
+                <strong>Próximo tópico teórico:</strong> a <a href="0006-faca-o-estado-convergir.html">Lição 06</a> aborda expiração, exclusão idempotente e reconciliação entre banco e storage sob falhas e concorrência.
+                <p>Antes de seguir, envie ao agente suas respostas da revisão. Se algum header parecer redundante, explique qual informação o cliente perderia sem ele.</p>
+            </div>
+        </section>
+    </main>
+
+    <footer class="page-footer">Lição baseada no controller de entrega, no serviço de arquivos e no wrapper de streams do WaifuVault no commit <code>5f5e94b</code>, comparados à RFC 9110.</footer>
+</div>
+</body>
+</html>

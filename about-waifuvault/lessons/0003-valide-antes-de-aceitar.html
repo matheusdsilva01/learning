@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Lição teórica sobre limites, MIME, filtros e validação de uploads no WaifuVault.">
+    <title>Lição 03: valide antes de aceitar</title>
+    <link rel="stylesheet" href="../assets/course.css">
+    <script src="../assets/quiz.js?v=2" defer></script>
+</head>
+<body>
+<div class="page">
+    <header class="masthead">
+        <strong>WaifuVault → Laravel</strong>
+        <nav aria-label="Navegação do curso">
+            <a href="../index.html">Introdução</a>
+            <a href="0002-entenda-um-upload-privado.html">Lição 02</a>
+            <a href="0004-separe-identidade-e-autoridade.html">Lição 04</a>
+            <a href="#tamanho">Tamanho</a>
+            <a href="#mime">MIME</a>
+            <a href="#filtros">Filtros</a>
+            <a href="#revisao">Revisão</a>
+            <a href="../reference/glossary.html">Glossário</a>
+        </nav>
+    </header>
+
+    <div class="hero">
+        <div>
+            <p class="eyebrow">Lição 03 · 20 minutos</p>
+            <h1>Valide antes de aceitar</h1>
+        </div>
+        <p class="hero-note"><strong>Vitória concreta</strong>Ao final, você conseguirá explicar por que tamanho, extensão, MIME e antivírus respondem a riscos diferentes e precisam atuar em camadas.</p>
+    </div>
+
+    <main>
+        <section>
+            <p class="kicker">Introdução</p>
+            <h2>Não existe uma pergunta única chamada “o arquivo é válido?”</h2>
+            <p class="lede">Validar upload é acumular evidências e aplicar políticas. Cada verificação observa uma propriedade diferente, acontece em um momento próprio e pode falhar de forma independente.</p>
+            <p>Um arquivo pode respeitar o limite de tamanho e ainda conter malware. Pode ter extensão <code>.jpg</code> e bytes de outro formato. Pode ter MIME permitido e um nome bloqueado pela política do serviço. Nenhum desses sinais substitui os demais.</p>
+            <div class="callout warning">
+                <p><strong>Fronteira de confiança:</strong> nome, extensão, <code>Content-Type</code> e <code>Content-Length</code> chegam do cliente. Eles ajudam no processamento, mas não são prova do conteúdo real.</p>
+            </div>
+        </section>
+
+        <section id="tamanho">
+            <p class="kicker">Primeira camada</p>
+            <h2>O tamanho precisa ser observado antes e durante a recepção</h2>
+            <p>Em <a href="../source/WaifuVault/src/config/multer/SizeLimitDiskStorage.ts"><code>SizeLimitDiskStorage.ts</code></a>, o WaifuVault usa duas verificações quando há limite para aquele upload:</p>
+            <ol class="flow" aria-label="Duas verificações de tamanho no upload multipart">
+                <li><strong>Declarar</strong>O cliente envia <code>Content-Length</code> para o corpo HTTP.</li>
+                <li><strong>Antecipar</strong>Se o valor declarado excede o limite, a requisição é rejeitada cedo.</li>
+                <li><strong>Transmitir</strong>Se continuar, o parser recebe os chunks do arquivo.</li>
+                <li><strong>Contar</strong>O servidor soma <code>chunk.length</code> conforme os bytes chegam.</li>
+                <li><strong>Interromper</strong>Ao exceder o limite real, pausa o stream e remove o parcial.</li>
+            </ol>
+            <p>O header é útil para economizar trabalho, mas é fornecido pelo cliente e pode faltar ou estar incorreto. A contagem do stream é a defesa efetiva porque observa os bytes recebidos. O <code>Content-Length</code> também descreve o corpo multipart completo, incluindo seu overhead, enquanto a contagem acompanha o conteúdo do arquivo. Como o código compara o tamanho total do corpo diretamente com o limite do arquivo, esse precheck pode rejeitar um arquivo que isoladamente caberia no limite.</p>
+            <p>Depois da recepção, <code>FileUploadService</code> consulta o tamanho do arquivo no filesystem. Esse valor alimenta os metadados e a política de expiração. Em buckets premium, o código desativa o limite da camada Multer; o tamanho final ainda é medido posteriormente.</p>
+            <div class="callout">
+                <p><strong>Resultado observável:</strong> excesso detectado antes ou durante o upload produz rejeição por tamanho. Se já houver um arquivo parcial, ele precisa ser removido para a falha não consumir storage.</p>
+            </div>
+        </section>
+
+        <section id="mime">
+            <p class="kicker">Segunda camada</p>
+            <h2>Extensão é um nome; MIME é uma classificação</h2>
+            <p>Renomear <code>programa.exe</code> para <code>foto.jpg</code> muda o nome, não os bytes. Por isso, <a href="../source/WaifuVault/src/services/MimeService.ts"><code>MimeService</code></a> procura evidências em uma ordem explícita:</p>
+            <ol class="flow" aria-label="Ordem de detecção de MIME">
+                <li><strong>Assinatura</strong><code>file-type</code> procura padrões conhecidos nos bytes.</li>
+                <li><strong>Extensão</strong>Sem assinatura reconhecida, o nome interno fornece um fallback.</li>
+                <li><strong>Texto</strong>Sem mapeamento, o primeiro KiB é avaliado como UTF-8.</li>
+                <li><strong>Conhecido</strong>Se alguma etapa reconhece o formato, retorna um MIME.</li>
+                <li><strong>Desconhecido</strong>Sem evidência suficiente, retorna <code>null</code>.</li>
+            </ol>
+            <p>O nome interno criado pelo Multer preserva a extensão extraída do nome original, embora substitua a parte principal por UUID. Portanto, o fallback por extensão continua indiretamente influenciado pelo cliente. A assinatura dos bytes tem precedência justamente por ser uma evidência mais forte.</p>
+            <p>Essa sequência descreve o caminho normal quando a biblioteca apenas não reconhece uma assinatura. Se <code>fileTypeFromFile()</code> lançar uma exceção, o código retorna <code>null</code> imediatamente e não tenta extensão nem texto.</p>
+            <table class="comparison">
+                <thead><tr><th>Sinal</th><th>Exemplo</th><th>Confiabilidade</th></tr></thead>
+                <tbody>
+                    <tr><td>Extensão</td><td><code>.png</code></td><td>Convenção útil, mas fácil de trocar.</td></tr>
+                    <tr><td>Header HTTP</td><td><code>image/png</code></td><td>Declaração do cliente; não aparece como fonte na detecção do serviço.</td></tr>
+                    <tr><td>Assinatura dos bytes</td><td>Sequência característica de PNG</td><td>Evidência do conteúdo, embora nem todo formato seja reconhecível.</td></tr>
+                    <tr><td>Teste de texto</td><td>UTF-8 sem caractere de substituição</td><td>Heurística ampla; classifica como <code>text/plain</code>.</td></tr>
+                </tbody>
+            </table>
+            <div class="callout warning">
+                <p><strong>Política observada:</strong> se o MIME não puder ser determinado, <code>MimeService.isBlocked()</code> permite o arquivo. Isso é comportamento <em>fail-open</em>: ausência de classificação não vira rejeição automática.</p>
+            </div>
+        </section>
+
+        <section id="filtros">
+            <p class="kicker">Cadeia de decisão</p>
+            <h2>Os filtros param na primeira rejeição</h2>
+            <p><a href="../source/WaifuVault/src/manager/FileFilterManager.ts"><code>FileFilterManager</code></a> ordena os filtros por prioridade decrescente, executa um por vez e retorna assim que algum falha. Na revisão estudada, a ordem é:</p>
+            <table class="reference-table">
+                <thead><tr><th>Ordem</th><th>Filtro</th><th>Decisão</th><th>Resposta</th></tr></thead>
+                <tbody>
+                    <tr><td>1</td><td>Nome</td><td>Compara o nome original com uma expressão regular configurada.</td><td><code>422</code> File Not Accepted</td></tr>
+                    <tr><td>2</td><td>MIME</td><td>Rejeita tipos presentes em <code>BLOCKED_MIME_TYPES</code>.</td><td><code>415</code> MIME type not supported</td></tr>
+                    <tr><td>3</td><td>Antivírus</td><td>Executa os engines habilitados e exige aprovação de todos.</td><td><code>400</code> Failed to store file</td></tr>
+                </tbody>
+            </table>
+            <p>Todos herdam de <a href="../source/WaifuVault/src/engine/impl/fileFilters/AbstractFileFilter.ts"><code>AbstractFileFilter</code></a>. Se um filtro retorna falso ou lança exceção, a classe tenta apagar o arquivo que já havia sido gravado. Assim, rejeição lógica e limpeza física permanecem próximas.</p>
+            <div class="system-grid">
+                <article class="system-card">
+                    <h3>Configuração ausente</h3>
+                    <p>Sem regex, todo nome passa. Sem lista de MIME bloqueado, todo MIME passa. Sem engine antivírus, o scan também passa.</p>
+                </article>
+                <article class="system-card">
+                    <h3>Abuso por nome</h3>
+                    <p>Opcionalmente, o IP é bloqueado após mais de dez rejeições consecutivas pela regex sem um intervalo superior a dez segundos; cada nova tentativa renova o prazo do contador.</p>
+                </article>
+                <article class="system-card">
+                    <h3>Antivírus síncrono</h3>
+                    <p>O scan participa da aceitação: uma reprovação impede que o novo registro seja persistido.</p>
+                </article>
+                <article class="system-card">
+                    <h3>Reputação posterior</h3>
+                    <p>VirusTotal não é esse filtro: a seleção configurada ocorre somente depois da persistência e o arquivo pode ser excluído mais tarde.</p>
+                </article>
+                <article class="system-card">
+                    <h3>Primeiro erro</h3>
+                    <p>Parar cedo economiza trabalho e fornece uma causa de rejeição, mas não produz uma lista completa de problemas.</p>
+                </article>
+                <article class="system-card">
+                    <h3>Duplicata antes</h3>
+                    <p>Checksum e reutilização de duplicata acontecem antes da cadeia; um registro ativo reutilizado encerra o fluxo sem executar esses filtros.</p>
+                </article>
+            </div>
+            <div class="callout warning">
+                <p><strong>Detalhe do snapshot:</strong> a seleção para reputação usa <code>dangerousMimeTypes.includes(mediaType ?? "")</code>, não uma lista dividida por igualdade exata. Isso produz comparação por substring e também enfileira MIME desconhecido, pois toda string contém a string vazia.</p>
+            </div>
+        </section>
+
+        <section>
+            <p class="kicker">Defesa em profundidade</p>
+            <h2>Cada camada reduz um risco, nenhuma resolve todos</h2>
+            <table class="comparison">
+                <thead><tr><th>Controle</th><th>Risco principal reduzido</th><th>O que não prova</th></tr></thead>
+                <tbody>
+                    <tr><td>Limite de bytes</td><td>Exaustão de banda, tempo e storage</td><td>Que o conteúdo é seguro.</td></tr>
+                    <tr><td>Nome bloqueado</td><td>Padrões conhecidos pela operação</td><td>Qual é o formato real.</td></tr>
+                    <tr><td>MIME detectado</td><td>Tipos incompatíveis com a política</td><td>Ausência de código malicioso.</td></tr>
+                    <tr><td>Antivírus</td><td>Ameaças reconhecidas pelo engine</td><td>Ausência de malware desconhecido.</td></tr>
+                    <tr><td>Storage privado</td><td>Execução ou acesso direto pelo servidor web</td><td>Que o upload deveria ter sido aceito.</td></tr>
+                    <tr><td>Reputação</td><td>Conteúdo já reportado externamente</td><td>Segurança de arquivo ainda desconhecido.</td></tr>
+                </tbody>
+            </table>
+            <p>A OWASP chama essa composição de defesa em profundidade: extensão, tipo, assinatura, nome, tamanho, permissões e análise de conteúdo se complementam. A política escolhida também precisa definir o tratamento do desconhecido, pois “não consegui classificar” é diferente de “classifiquei e permiti”.</p>
+            <p class="caption">Fonte recomendada: <a href="https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html">OWASP File Upload Cheat Sheet</a>.</p>
+        </section>
+
+        <section id="revisao">
+            <p class="kicker">Recuperação ativa</p>
+            <h2>Escolha a evidência mais forte</h2>
+            <div class="quiz"
+                 data-quiz
+                 data-correct-feedback="Correto. O nome e o header podem mentir; a assinatura dos bytes tem precedência na detecção."
+                 data-incorrect-feedback="Ainda não. Identifique quais informações vieram do cliente e qual verificação observa o conteúdo.">
+                <h3>Um upload se chama foto.jpg e declara image/jpeg, mas sua assinatura é reconhecida como outro formato bloqueado. Qual decisão segue o desenho estudado?</h3>
+                <div class="quiz-options">
+                    <button type="button" data-answer data-feedback="A extensão é apenas uma convenção fornecida pelo cliente." aria-pressed="false">Aceitar porque a extensão apresentada termina corretamente em arquivo .jpg</button>
+                    <button type="button" data-answer data-feedback="O header também é uma declaração controlada pelo cliente." aria-pressed="false">Aceitar porque o header apresentado informa corretamente o tipo image/jpeg</button>
+                    <button type="button" data-answer data-correct="true" aria-pressed="false">Rejeitar porque a assinatura identifica um tipo configurado como proibido</button>
+                    <button type="button" data-answer data-feedback="Renomear não altera o formato real nem remove o risco associado." aria-pressed="false">Renomear internamente e ignorar o formato detectado durante a validação</button>
+                </div>
+                <p class="quiz-feedback" data-feedback aria-live="polite">Escolha uma alternativa para receber feedback.</p>
+            </div>
+
+            <div class="callout">
+                <h3>Explique sem consultar a lição</h3>
+                <p>Responda ao agente:</p>
+                <p><strong>1.</strong> Por que verificar apenas <code>Content-Length</code> não controla o tamanho real?<br><strong>2.</strong> Por que detectar MIME não substitui antivírus?<br><strong>3.</strong> O que significa aceitar MIME desconhecido em modo <em>fail-open</em>?<br><strong>4.</strong> Por que o arquivo precisa ser removido quando um filtro o rejeita?</p>
+            </div>
+        </section>
+
+        <section>
+            <p class="kicker">Resumo de bolso</p>
+            <h2>O que precisa permanecer</h2>
+            <ul class="checklist">
+                <li>Headers antecipam decisões, mas bytes observados sustentam a validação.</li>
+                <li>Extensão, MIME e assinatura do conteúdo não são sinônimos.</li>
+                <li>Detecção desconhecida exige uma política explícita de aceitação ou rejeição.</li>
+                <li>Filtros ordenados param no primeiro erro e removem o blob rejeitado.</li>
+                <li>Antivírus síncrono e reputação assíncrona ocupam momentos diferentes.</li>
+                <li>Defesa em profundidade combina controles com limitações distintas.</li>
+            </ul>
+            <div class="next-step">
+                <strong>Próximo tópico teórico:</strong> a <a href="0004-separe-identidade-e-autoridade.html">Lição 04</a> aborda identidade, tokens e capacidades: como separar URL de leitura, segredo de gestão e caminho interno.
+                <p>Antes de seguir, envie ao agente suas respostas da revisão. Se uma camada ainda parecer redundante, explique qual você removeria e qual risco permaneceria.</p>
+            </div>
+        </section>
+    </main>
+
+    <footer class="page-footer">Lição baseada no pipeline de filtros, no serviço de MIME, no storage do Multer e no código do WaifuVault no commit <code>5f5e94b</code>.</footer>
+</div>
+</body>
+</html>

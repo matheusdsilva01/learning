@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Lição teórica sobre identificadores, tokens e capacidades no WaifuVault.">
+    <title>Lição 04: separe identidade e autoridade</title>
+    <link rel="stylesheet" href="../assets/course.css">
+    <script src="../assets/quiz.js?v=2" defer></script>
+</head>
+<body>
+<div class="page">
+    <header class="masthead">
+        <strong>WaifuVault → Laravel</strong>
+        <nav aria-label="Navegação do curso">
+            <a href="../index.html">Introdução</a>
+            <a href="0003-valide-antes-de-aceitar.html">Lição 03</a>
+            <a href="#valores">Valores</a>
+            <a href="#capacidades">Capacidades</a>
+            <a href="#revogacao">Revogação</a>
+            <a href="#revisao">Revisão</a>
+            <a href="../reference/glossary.html">Glossário</a>
+        </nav>
+    </header>
+
+    <div class="hero">
+        <div>
+            <p class="eyebrow">Lição 04 · 20 minutos</p>
+            <h1>Separe identidade e autoridade</h1>
+        </div>
+        <p class="hero-note"><strong>Vitória concreta</strong>Ao final, você conseguirá dizer qual valor localiza bytes, qual aparece na URL pública e qual concede poder de gestão.</p>
+    </div>
+
+    <main>
+        <section>
+            <p class="kicker">Introdução</p>
+            <h2>Saber “qual arquivo?” não responde “o que posso fazer?”</h2>
+            <p class="lede">Identificadores localizam recursos. Credenciais demonstram autoridade. Um mesmo texto pode cumprir os dois papéis, mas misturá-los amplia o impacto de qualquer vazamento.</p>
+            <p>Uma aplicação pode usar um ID numérico para relacionamentos internos, um nome aleatório para localizar o blob, uma URL para leitura e um segredo para alteração ou exclusão. Esses valores apontam para o mesmo arquivo, mas não precisam conceder os mesmos poderes.</p>
+            <div class="callout warning">
+                <p><strong>Pergunta de projeto:</strong> se alguém receber este valor, quais operações passa a conseguir executar? A resposta define se ele é apenas identificador, capacidade pública ou segredo de gestão.</p>
+            </div>
+        </section>
+
+        <section id="valores">
+            <p class="kicker">No arquivo individual</p>
+            <h2>O WaifuVault mantém vários nomes para o mesmo recurso</h2>
+            <table class="reference-table">
+                <thead><tr><th>Valor</th><th>Origem</th><th>Papel observado</th><th>Exposição</th></tr></thead>
+                <tbody>
+                    <tr><td><code>id</code></td><td>Banco</td><td>Chave numérica do registro e referência em alguns fluxos internos.</td><td>Aparece na resposta da API, mas não serve o arquivo diretamente.</td></tr>
+                    <tr><td><code>originalFileName</code></td><td>Cliente</td><td>Nome de apresentação e parte opcional da URL.</td><td>Pode ser mostrado ao destinatário.</td></tr>
+                    <tr><td><code>fileName</code></td><td>Servidor</td><td>Nome-base interno que localiza o registro e o blob.</td><td>Compõe a URL pública de leitura.</td></tr>
+                    <tr><td><code>token</code></td><td>Servidor</td><td>Consulta informações, acessa alterações e exclui o arquivo via REST.</td><td>Retorna ao cliente após o upload; não compõe a URL pública do arquivo.</td></tr>
+                    <tr><td><code>checksum</code></td><td>Conteúdo</td><td>Compara bytes para deduplicação e reputação.</td><td>Metadado interno, não credencial.</td></tr>
+                </tbody>
+            </table>
+            <p><a href="../source/WaifuVault/src/services/FileUploadService.ts"><code>FileUploadService</code></a> gera o <code>token</code> com <code>uuid()</code>. No upload multipart, o <code>fileName</code> vem do UUID usado anteriormente pelo storage; no upload por URL, <a href="../source/WaifuVault/src/services/FileUrlService.ts"><code>FileUrlService</code></a> usa o timestamp atual como nome-base. O modelo possui unicidade explícita para <code>token</code>; <code>fileName</code> é indexado, mas não tem restrição única no banco.</p>
+            <p>A resposta transformada por <a href="../source/WaifuVault/src/model/dto/WaifuFile.ts"><code>WaifuFile</code></a> entrega <code>token</code>, <code>url</code> e <code>id</code>. O rótulo “public ID” usado pelo DTO para o número não muda o comportamento: são as rotas que determinam quais poderes cada valor realmente possui.</p>
+        </section>
+
+        <section>
+            <p class="kicker">Duas rotas, duas finalidades</p>
+            <h2>Leitura usa <code>fileName</code>; gestão usa <code>token</code></h2>
+            <ol class="flow" aria-label="Separação entre leitura e gestão">
+                <li><strong>Upload</strong>O serviço cria o registro e devolve URL mais token.</li>
+                <li><strong>Compartilhar</strong>O usuário entrega somente a URL pública ao destinatário.</li>
+                <li><strong>Ler</strong>A rota <code>/f</code> resolve o registro pelo <code>fileName</code>.</li>
+                <li><strong>Gerenciar</strong>As rotas REST recebem o <code>token</code> de gestão.</li>
+                <li><strong>Aplicar</strong>O poder disponível depende da rota que aceitou o valor.</li>
+            </ol>
+            <table class="comparison">
+                <thead><tr><th>Entrada</th><th>Valor principal</th><th>Autoridade concedida</th></tr></thead>
+                <tbody>
+                    <tr><td><code>GET /f/{fileName}/{originalName?}</code></td><td><code>fileName</code></td><td>Ler um arquivo sem senha, sujeito a existência e expiração.</td></tr>
+                    <tr><td><code>/p/{fileName}/...</code> no frontend</td><td><code>fileName</code></td><td>Conduzir o fluxo de senha; a entrega no backend exige <code>x-password</code> em <code>/f</code>.</td></tr>
+                    <tr><td><code>GET /rest/{token}</code></td><td><code>token</code></td><td>Consultar metadados e tempo restante.</td></tr>
+                    <tr><td><code>PATCH /rest/{token}</code></td><td><code>token</code></td><td>Alterar opções; mudar ou remover senha de arquivo criptografado também exige <code>previousPassword</code>.</td></tr>
+                    <tr><td><code>DELETE /rest/{token}</code></td><td><code>token</code></td><td>Remover registro e blob.</td></tr>
+                </tbody>
+            </table>
+            <p>O nome original na URL não concede autoridade adicional. Quando está presente, <a href="../source/WaifuVault/src/services/FileService.ts"><code>FileService.getEntry()</code></a> exige que corresponda ao metadado armazenado; a busca principal continua sendo feita pelo nome interno.</p>
+        </section>
+
+        <section id="capacidades">
+            <p class="kicker">Modelo de segurança</p>
+            <h2>Posse do valor pode ser a própria autorização</h2>
+            <p>Uma <strong>capacidade</strong> é uma credencial cuja posse autoriza uma operação. Ela não precisa dizer quem é a pessoa. No WaifuVault, as rotas REST do arquivo não exigem uma conta associada: apresentar o <code>token</code> correto abre consulta, alteração e exclusão. Há uma restrição adicional nas transições de senha de arquivos criptografados: mudar ou remover a senha também exige <code>previousPassword</code>.</p>
+            <p>A URL pública de um arquivo sem senha também funciona como capacidade de leitura. No multipart, o UUID torna o <code>fileName</code> difícil de adivinhar; no upload por URL, o timestamp usado como nome-base oferece menos imprevisibilidade. Em ambos os casos, quem conhece uma URL válida pode ler enquanto o arquivo existir.</p>
+            <div class="system-grid">
+                <article class="system-card">
+                    <h3>Opaco</h3>
+                    <p>O valor não carrega significado de negócio legível. Um UUID não revela dono, tamanho ou expiração.</p>
+                </article>
+                <article class="system-card">
+                    <h3>Imprevisível</h3>
+                    <p>Não deve ser possível derivar o próximo segredo observando os anteriores. Os tokens do projeto usam aleatoriedade criptográfica.</p>
+                </article>
+                <article class="system-card">
+                    <h3>Escopo</h3>
+                    <p>Cada capacidade deveria conceder somente as operações necessárias ao destinatário.</p>
+                </article>
+                <article class="system-card">
+                    <h3>Posse</h3>
+                    <p>Sem identidade adicional, copiar o valor equivale a transferir o poder associado.</p>
+                </article>
+                <article class="system-card">
+                    <h3>Segredo</h3>
+                    <p>Uma URL pública pode ser opaca sem ser secreta; já um token de exclusão precisa permanecer restrito.</p>
+                </article>
+                <article class="system-card">
+                    <h3>Revogação</h3>
+                    <p>O sistema precisa definir como encerrar a autoridade antes ou no fim da vida do recurso.</p>
+                </article>
+            </div>
+            <div class="callout warning">
+                <p><strong>Menor privilégio:</strong> compartilhar o <code>token</code> do arquivo para permitir download também entrega alteração e exclusão. A URL pública concede uma autoridade menor e é o valor apropriado para leitura.</p>
+            </div>
+        </section>
+
+        <section id="revogacao">
+            <p class="kicker">Buckets e álbuns</p>
+            <h2>O próprio WaifuVault mostra uma separação mais profunda</h2>
+            <p>No arquivo individual, esta revisão não oferece rotação isolada de <code>token</code> ou <code>fileName</code>. Expiração ou exclusão encerram as capacidades junto com o recurso. Adicionar senha muda a URL apresentada de <code>/f</code> para <code>/p</code> e pode trocar o host pelo frontend, mas preserva <code>fileName</code> e token REST. Trocar a senha de um arquivo já protegido mantém essa URL e também não revoga o token REST.</p>
+            <p>O <code>bucketToken</code> autentica a gestão de um bucket e é mantido na sessão após o login. Ele dá acesso amplo aos arquivos e álbuns daquele agrupamento. O README alerta explicitamente que essa chave não deve ser compartilhada.</p>
+            <p>Álbuns possuem dois valores distintos:</p>
+            <table class="comparison">
+                <thead><tr><th>Valor</th><th>Finalidade</th><th>Revogação</th></tr></thead>
+                <tbody>
+                    <tr><td><code>albumToken</code></td><td>Identidade privada usada para administrar o álbum.</td><td>Permanece estável enquanto o álbum existe.</td></tr>
+                    <tr><td><code>publicToken</code></td><td>Identidade compartilhável usada na URL pública.</td><td>Ao descompartilhar, vira <code>null</code>; ao compartilhar novamente, recebe novo UUID.</td></tr>
+                </tbody>
+            </table>
+            <ol class="flow" aria-label="Revogação do compartilhamento de um álbum">
+                <li><strong>Privado</strong>O álbum existe com <code>publicToken = null</code>.</li>
+                <li><strong>Compartilhar</strong>O sistema gera um UUID público novo.</li>
+                <li><strong>Distribuir</strong>A URL com esse UUID pode ser entregue a terceiros.</li>
+                <li><strong>Revogar</strong>Descompartilhar remove o token público atual.</li>
+                <li><strong>Renovar</strong>Novo compartilhamento cria outra URL pública.</li>
+            </ol>
+            <p>Esse desenho revoga o acesso compartilhado sem trocar o identificador privado de gestão. A URL antiga deixa de localizar um álbum público, enquanto o administrador continua controlando o mesmo recurso.</p>
+            <p class="caption">Evidência: <a href="../source/WaifuVault/src/model/db/Album.model.ts"><code>Album.model.ts</code></a> e <a href="../source/WaifuVault/src/db/dao/AlbumDao.ts"><code>AlbumDao.setShareStatus()</code></a>.</p>
+        </section>
+
+        <section>
+            <p class="kicker">Superfície de vazamento</p>
+            <h2>Segredos em URLs atravessam muitos componentes</h2>
+            <p>Tokens colocados no caminho podem aparecer no histórico do navegador, logs do servidor, proxies, ferramentas de monitoramento e capturas de tela. Dependendo da política de referência, uma URL também pode acompanhar a navegação para outro site. O uso de HTTPS protege o trânsito contra observadores da rede, mas não remove essas cópias nos extremos.</p>
+            <table class="reference-table">
+                <thead><tr><th>Valor</th><th>Tratamento coerente</th></tr></thead>
+                <tbody>
+                    <tr><td>URL pública de leitura</td><td>Pode ser compartilhada intencionalmente, mas ainda deve ser tratada como acesso ao conteúdo.</td></tr>
+                    <tr><td>Token de gestão</td><td>Não compartilhar, não incluir em telemetria e evitar registrá-lo integralmente.</td></tr>
+                    <tr><td>Chave de bucket</td><td>Tratar como credencial ampla; vazamento afeta muitos recursos.</td></tr>
+                    <tr><td>Checksum</td><td>Não concede autoridade, embora possa revelar que um conteúdo conhecido está presente.</td></tr>
+                </tbody>
+            </table>
+            <p class="caption">A <a href="https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html#data-to-exclude">OWASP Logging Cheat Sheet</a> recomenda não registrar diretamente access tokens e identificadores de sessão.</p>
+        </section>
+
+        <section id="revisao">
+            <p class="kicker">Recuperação ativa</p>
+            <h2>Compartilhe o menor poder necessário</h2>
+            <div class="quiz"
+                 data-quiz
+                 data-correct-feedback="Correto. A URL pública concede leitura; o token REST também permitiria alterar e excluir."
+                 data-incorrect-feedback="Ainda não. Compare a autoridade das rotas de leitura com PATCH e DELETE no endpoint REST.">
+                <h3>Você quer permitir que outra pessoa baixe um arquivo sem conceder gestão. Qual valor deve enviar?</h3>
+                <div class="quiz-options">
+                    <button type="button" data-answer data-correct="true" aria-pressed="false">Enviar somente a URL pública retornada depois do upload concluído</button>
+                    <button type="button" data-answer data-feedback="Esse token também autoriza alteração e exclusão pelas rotas REST." aria-pressed="false">Enviar somente o token REST retornado depois do upload concluído</button>
+                    <button type="button" data-answer data-feedback="A chave concede gestão ampla sobre todo o bucket, não apenas leitura." aria-pressed="false">Enviar somente a chave privada do bucket contendo o arquivo</button>
+                    <button type="button" data-answer data-feedback="O checksum compara conteúdo, mas não é aceito pela rota de leitura." aria-pressed="false">Enviar somente o checksum calculado para identificar os bytes armazenados</button>
+                </div>
+                <p class="quiz-feedback" data-feedback aria-live="polite">Escolha uma alternativa para receber feedback.</p>
+            </div>
+
+            <div class="callout">
+                <h3>Explique sem consultar a lição</h3>
+                <p>Responda ao agente:</p>
+                <p><strong>1.</strong> Por que <code>fileName</code> e <code>token</code> não são intercambiáveis?<br><strong>2.</strong> O que transforma uma URL opaca em capacidade de leitura?<br><strong>3.</strong> Por que compartilhar o token REST viola menor privilégio?<br><strong>4.</strong> Como <code>publicToken</code> permite revogar um álbum sem trocar <code>albumToken</code>?</p>
+            </div>
+        </section>
+
+        <section>
+            <p class="kicker">Resumo de bolso</p>
+            <h2>O que precisa permanecer</h2>
+            <ul class="checklist">
+                <li>Identidade localiza um recurso; autoridade define operações permitidas.</li>
+                <li>Valores opacos precisam ser imprevisíveis quando sua posse concede acesso.</li>
+                <li>A URL pública do arquivo usa <code>fileName</code>; gestão REST usa <code>token</code>.</li>
+                <li>Um único token de consulta, alteração e exclusão possui autoridade ampla.</li>
+                <li>Capacidades públicas e segredos de gestão exigem tratamentos diferentes.</li>
+                <li>Separar token público de privado permite revogar compartilhamento sem perder gestão.</li>
+            </ul>
+            <div class="next-step">
+                <strong>Próximo tópico teórico:</strong> a <a href="0005-entregue-arquivos-sob-controle.html">Lição 05</a> aborda entrega HTTP controlada, incluindo resolução do arquivo, expiração, headers, streaming e requisições de faixa.
+                <p>Antes de seguir, envie ao agente suas respostas da revisão. Para cada valor, diga também o impacto esperado se ele vazar.</p>
+            </div>
+        </section>
+    </main>
+
+    <footer class="page-footer">Lição baseada nos modelos, DTOs, rotas REST e rotas de entrega do WaifuVault no commit <code>5f5e94b</code>, com orientação de logging da OWASP.</footer>
+</div>
+</body>
+</html>

@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Introdução ao WaifuVault, suas funcionalidades e sua arquitetura geral.">
+    <title>Introdução ao WaifuVault</title>
+    <link rel="stylesheet" href="assets/course.css">
+</head>
+<body>
+<div class="page">
+    <header class="masthead">
+        <strong>WaifuVault → Laravel</strong>
+        <nav aria-label="Navegação do curso">
+            <a href="#produto">O produto</a>
+            <a href="#funcionalidades">Funcionalidades</a>
+            <a href="#arquitetura">Arquitetura</a>
+            <a href="lessons/0001-trace-o-ciclo-de-um-arquivo.html">Lição 01</a>
+            <a href="reference/glossary.html">Glossário</a>
+        </nav>
+    </header>
+
+    <div class="hero">
+        <div>
+            <p class="eyebrow">Introdução</p>
+            <h1>Conheça o WaifuVault</h1>
+        </div>
+        <p class="hero-note"><strong>Em uma frase</strong>Um serviço open source que recebe arquivos, controla por quanto tempo eles ficam disponíveis e oferece URLs para recuperá-los.</p>
+    </div>
+
+    <main>
+        <section id="produto">
+            <p class="kicker">O produto</p>
+            <h2>Hospedagem temporária, não armazenamento permanente</h2>
+            <p class="lede">O WaifuVault é um serviço de hospedagem temporária de arquivos. Seu trabalho não termina ao aceitar um upload: ele precisa guardar os bytes, criar uma forma de acesso, aplicar políticas durante a vida útil do arquivo e removê-lo quando esse período acabar.</p>
+            <p>A política descrita pelo projeto relaciona tamanho e duração. Arquivos menores podem permanecer próximos do máximo de 365 dias; conforme o tamanho se aproxima do limite aceito, o tempo cai em uma curva cúbica até 30 dias. Isso transforma espaço em disco e tempo de retenção em partes do domínio, não apenas em configuração de infraestrutura.</p>
+            <div class="callout">
+                <p><strong>Fonte primária:</strong> esta introdução descreve o código e o README no commit <code>5f5e94b</code>. O projeto continua evoluindo; fixar uma revisão evita misturar comportamentos de versões diferentes.</p>
+                <p class="caption"><a href="https://github.com/waifuvault/WaifuVault/tree/5f5e94b87abba950670648d962432eceec26588c">WaifuVault no GitHub</a> · <a href="source/WaifuVault/README.md">README local</a></p>
+            </div>
+        </section>
+
+        <section>
+            <p class="kicker">Experiência básica</p>
+            <h2>Da entrada à remoção</h2>
+            <ol class="flow" aria-label="Jornada resumida de um arquivo">
+                <li><strong>Enviar</strong>O cliente fornece um arquivo multipart ou uma URL remota.</li>
+                <li><strong>Aceitar</strong>O serviço aplica limites, filtros e opções de acesso.</li>
+                <li><strong>Guardar</strong>Os bytes vão para o filesystem e os metadados para o banco.</li>
+                <li><strong>Compartilhar</strong>Uma URL permite consultar ou baixar o conteúdo.</li>
+                <li><strong>Encerrar</strong>Exclusão explícita ou expiração encerra a disponibilidade.</li>
+            </ol>
+            <p>A API REST expõe esse núcleo com operações para enviar um arquivo, consultar suas informações e excluí-lo por token. A interface web acrescenta uma experiência visual para upload e gestão.</p>
+        </section>
+
+        <section id="funcionalidades">
+            <p class="kicker">Além do upload</p>
+            <h2>Um produto com várias camadas</h2>
+            <div class="system-grid">
+                <article class="system-card">
+                    <h3>Acesso</h3>
+                    <p>Expiração, proteção por senha, ocultação do nome e acesso único alteram como cada arquivo pode ser recuperado.</p>
+                </article>
+                <article class="system-card">
+                    <h3>Organização</h3>
+                    <p>Buckets agrupam arquivos sob uma chave de gestão. Álbuns organizam subconjuntos e podem ganhar uma página pública.</p>
+                </article>
+                <article class="system-card">
+                    <h3>Distribuição</h3>
+                    <p>Arquivos podem ser vistos individualmente; álbuns compartilhados permitem selecionar vários itens e baixá-los em ZIP.</p>
+                </article>
+                <article class="system-card">
+                    <h3>Moderação</h3>
+                    <p>Filtros por nome e MIME, antivírus e reputação no VirusTotal ajudam a rejeitar ou remover conteúdo perigoso.</p>
+                </article>
+                <article class="system-card">
+                    <h3>Abuso</h3>
+                    <p>Rate limiting global e de upload, CAPTCHA, consulta a blocklist e banimento de IP reduzem uso automatizado indevido.</p>
+                </article>
+                <article class="system-card">
+                    <h3>Administração</h3>
+                    <p>O painel permite consultar, ordenar, baixar e excluir arquivos, controlar IPs e observar estatísticas do serviço.</p>
+                </article>
+            </div>
+            <div class="callout warning">
+                <p><strong>As credenciais não têm o mesmo alcance.</strong> A chave de um bucket dá poder de gestão, inclusive exclusão, e não deve ser compartilhada. Já uma URL pública de álbum existe para distribuição e pode ser revogada.</p>
+            </div>
+        </section>
+
+        <section id="arquitetura">
+            <p class="kicker">Visão de conjunto</p>
+            <h2>Um serviço composto por responsabilidades diferentes</h2>
+            <table class="comparison">
+                <thead><tr><th>Componente</th><th>Responsabilidade</th></tr></thead>
+                <tbody>
+                    <tr><td>Frontend Next.js</td><td>Uploader, páginas de acesso e interfaces administrativas.</td></tr>
+                    <tr><td>Backend TypeScript</td><td>API REST, regras de negócio, entrega dos arquivos e tarefas agendadas.</td></tr>
+                    <tr><td>Postgres ou SQLite</td><td>Metadados, usuários, buckets, álbuns e outros estados relacionais.</td></tr>
+                    <tr><td>Filesystem</td><td>Conteúdo binário dos uploads e derivados produzidos pelo sistema.</td></tr>
+                    <tr><td>Redis</td><td>Cache e coordenação de recursos que não pertencem ao armazenamento permanente.</td></tr>
+                    <tr><td>Serviços Go</td><td>Geração de thumbnails e criação de arquivos ZIP.</td></tr>
+                    <tr><td>ClamAV</td><td>Inspeção antivírus com acesso somente de leitura aos uploads.</td></tr>
+                </tbody>
+            </table>
+            <p>Essa composição mostra por que “hospedar um arquivo” é um problema de backend completo: envolve HTTP, streaming, persistência, segurança, autorização, tarefas assíncronas e operação. O <a href="reference/waifuvault-system-map.html">mapa do sistema</a> detalha como essas responsabilidades se conectam.</p>
+        </section>
+
+        <section>
+            <p class="kicker">Ponto de partida</p>
+            <h2>O núcleo por trás das funcionalidades</h2>
+            <p>Senha, álbuns, thumbnails e antivírus ampliam o produto, mas todos dependem de uma base: saber onde estão os bytes, quais metadados os descrevem, quem pode acessá-los e quando devem desaparecer.</p>
+            <div class="next-step">
+                <strong>Continue pela <a href="lessons/0001-trace-o-ciclo-de-um-arquivo.html">Lição 01</a>:</strong> acompanhe o ciclo completo de um arquivo antes de examinar cada etapa em detalhe.
+                <p>Se uma funcionalidade ou componente estiver obscuro, pergunte ao agente antes de seguir.</p>
+            </div>
+        </section>
+    </main>
+
+    <footer class="page-footer">Descrição baseada no README, no Docker Compose e no código-fonte do WaifuVault no commit <code>5f5e94b</code>.</footer>
+</div>
+</body>
+</html>

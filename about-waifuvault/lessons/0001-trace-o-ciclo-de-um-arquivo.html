@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Lição curta para rastrear o ciclo de vida de um arquivo no WaifuVault.">
+    <title>Lição 01: trace o ciclo de um arquivo</title>
+    <link rel="stylesheet" href="../assets/course.css">
+    <script src="../assets/quiz.js?v=2" defer></script>
+</head>
+<body>
+<div class="page">
+    <header class="masthead">
+        <strong>WaifuVault → Laravel</strong>
+        <nav aria-label="Navegação do curso">
+            <a href="../index.html">Introdução</a>
+            <a href="#modelo">Modelo</a>
+            <a href="#pratica">Prática</a>
+            <a href="0002-entenda-um-upload-privado.html">Lição 02</a>
+            <a href="../reference/waifuvault-system-map.html">Mapa</a>
+            <a href="../reference/glossary.html">Glossário</a>
+        </nav>
+    </header>
+
+    <div class="hero">
+        <div>
+            <p class="eyebrow">Lição 01 · 12 minutos</p>
+            <h1>Trace o ciclo de um arquivo</h1>
+        </div>
+        <p class="hero-note"><strong>Vitória concreta</strong>Ao final, você conseguirá explicar onde os bytes e os metadados vivem, quem os cria e quem encerra sua vida útil.</p>
+    </div>
+
+    <main>
+        <section>
+            <p class="lede">Um host de arquivos não é uma tabela com um campo binário. Ele coordena dois estados: os <strong>bytes no storage</strong> e os <strong>metadados no banco</strong>. O desenho precisa continuar correto quando uma dessas operações falha.</p>
+            <div class="callout warning">
+                <p><strong>Regra de segurança inicial:</strong> o nome e o caminho internos pertencem ao servidor. O nome enviado pelo cliente é apenas metadado de apresentação. A OWASP recomenda gerar o nome e manter uploads fora do webroot, servindo-os por um handler da aplicação.</p>
+                <p class="caption">Fonte primária recomendada: <a href="https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html#file-upload-protection">OWASP File Upload Cheat Sheet</a>.</p>
+            </div>
+        </section>
+
+        <section id="modelo">
+            <p class="kicker">Modelo mental</p>
+            <h2>Cinco transições, duas formas de estado</h2>
+            <ol class="flow" aria-label="Ciclo de vida resumido">
+                <li><strong>A · Receber</strong>O parser multipart transmite os bytes para um arquivo interno gerado.</li>
+                <li><strong>B · Interpretar</strong>O controller valida a forma da requisição e delega o caso de uso.</li>
+                <li><strong>C · Aceitar</strong>O serviço filtra, detecta MIME, mede e calcula a expiração.</li>
+                <li><strong>D · Publicar</strong>Os metadados são persistidos; a resposta traz token de gestão e URL de entrega.</li>
+                <li><strong>E · Encerrar</strong>A leitura serve por stream; depois do TTL, a limpeza remove registro e bytes.</li>
+            </ol>
+
+            <h3>A primeira surpresa</h3>
+            <p>No WaifuVault, <a href="https://github.com/waifuvault/WaifuVault/blob/5f5e94b87abba950670648d962432eceec26588c/src/config/multer/SizeLimitDiskStorage.ts"><code>SizeLimitDiskStorage</code></a> já escreveu o multipart em disco quando <a href="https://github.com/waifuvault/WaifuVault/blob/5f5e94b87abba950670648d962432eceec26588c/src/controllers/rest/impl/FileUploadController.ts"><code>FileUploadController.addEntry()</code></a> recebe o objeto do arquivo. O limite é conferido tanto pelo <code>Content-Length</code> quanto pela contagem real dos chunks, pois o header vem do cliente e pode estar ausente ou incorreto.</p>
+
+            <h3>A orquestração</h3>
+            <p><a href="https://github.com/waifuvault/WaifuVault/blob/5f5e94b87abba950670648d962432eceec26588c/src/services/FileUploadService.ts"><code>FileUploadService.processUpload()</code></a> calcula checksum, trata duplicatas, executa filtros, detecta o MIME, mede o arquivo, configura opções, calcula a expiração e persiste <a href="https://github.com/waifuvault/WaifuVault/blob/5f5e94b87abba950670648d962432eceec26588c/src/model/db/FileUpload.model.ts"><code>FileUploadModel</code></a>. O modelo guarda um <code>token</code> para operações REST e um <code>fileName</code> separado, usado para localizar e servir o arquivo. A URL pública original deriva de <code>fileName</code>, não de <code>token</code>; os bytes continuam no filesystem.</p>
+
+            <h3>Entrega não é acesso direto</h3>
+            <p><a href="https://github.com/waifuvault/WaifuVault/blob/5f5e94b87abba950670648d962432eceec26588c/src/controllers/serve/FileServerController.ts"><code>FileServerController</code></a> resolve o <code>fileName</code> recebido na URL, verifica proteção, define headers e transmite um stream. Áudio e vídeo podem usar faixas de bytes. Isso mantém regras de acesso na aplicação, em vez de expor o diretório de uploads.</p>
+
+            <h3>Expirar e limpar não são a mesma coisa</h3>
+            <p>Um arquivo expirado precisa deixar de ser servido assim que <code>expires_at</code> passa. A remoção física pode ocorrer depois. No original, <a href="https://github.com/waifuvault/WaifuVault/blob/5f5e94b87abba950670648d962432eceec26588c/src/services/FileCleaner.ts"><code>FileCleaner</code></a> busca expirados e também reconcilia arquivos sem registro e registros sem arquivo.</p>
+        </section>
+
+        <section>
+            <p class="kicker">Tradução, não cópia</p>
+            <h2>O equivalente mínimo em Laravel</h2>
+            <table class="comparison">
+                <thead><tr><th>Responsabilidade</th><th>WaifuVault</th><th>Laravel MVP</th></tr></thead>
+                <tbody>
+                    <tr><td>Validar requisição</td><td>Controller + decorators</td><td>Form Request</td></tr>
+                    <tr><td>Gravar bytes</td><td>Storage customizado do Multer</td><td><code>Storage::putFile()</code> em disco privado</td></tr>
+                    <tr><td>Persistir metadados</td><td>TypeORM model/repository</td><td>Model Eloquent</td></tr>
+                    <tr><td>Entregar bytes</td><td>Controller com streams</td><td>Resposta de arquivo/stream controlada</td></tr>
+                    <tr><td>Remover expirados</td><td>Serviço agendado</td><td>Command + scheduler + lock</td></tr>
+                </tbody>
+            </table>
+            <p>A abstração de filesystem do Laravel permite manter o mesmo caso de uso ao trocar disco local por S3. Ela também fornece fakes para testar uploads sem tocar o storage real. Consulte <a href="https://laravel.com/docs/13.x/filesystem">Laravel File Storage</a>.</p>
+        </section>
+
+        <section id="pratica">
+            <p class="kicker">Recuperação ativa</p>
+            <h2>Reconstrua sem olhar o diagrama</h2>
+            <div class="quiz"
+                 data-quiz
+                 data-correct-feedback="Correto. Os bytes chegam antes da regra de negócio; a publicação só ocorre depois da aceitação."
+                 data-incorrect-feedback="Ainda não. Localize qual componente recebe o stream antes de o controller executar.">
+                <h3>Qual sequência representa o caminho de um novo upload?</h3>
+                <p class="small">A = receber, B = interpretar, C = aceitar, D = publicar, E = encerrar.</p>
+                <div class="quiz-options">
+                    <button type="button" data-answer data-correct="true" aria-pressed="false">A → B → C → D → E</button>
+                    <button type="button" data-answer data-feedback="O parser multipart precisa gravar os bytes antes de o controller receber o arquivo." aria-pressed="false">B → A → C → D → E</button>
+                    <button type="button" data-answer data-feedback="O controller interpreta a requisição antes de o serviço aceitar e publicar o arquivo." aria-pressed="false">A → C → D → B → E</button>
+                    <button type="button" data-answer data-feedback="Validar o conteúdo exige que os bytes tenham sido recebidos; depois o controller delega ao serviço." aria-pressed="false">C → B → A → D → E</button>
+                </div>
+                <p class="quiz-feedback" data-feedback aria-live="polite">Escolha uma sequência para receber feedback.</p>
+            </div>
+
+            <div class="callout">
+                <h3>Cheque seu entendimento</h3>
+                <p>Imagine que os bytes foram gravados, mas a inserção no banco falhou. Responda ao agente:</p>
+                <p><strong>1.</strong> Que tipo de órfão foi criado?<br><strong>2.</strong> Em qual camada você tentaria compensar a falha?<br><strong>3.</strong> Por que uma transação SQL isolada não resolve tudo?</p>
+            </div>
+        </section>
+
+        <section>
+            <p class="kicker">Resumo de bolso</p>
+            <h2>O que precisa permanecer</h2>
+            <ul class="checklist">
+                <li>Bytes ficam no storage privado; metadados ficam no banco.</li>
+                <li>Token de gestão, identificador de entrega, caminho interno e nome original podem ser conceitos diferentes.</li>
+                <li>Validação do tamanho precisa observar os bytes reais recebidos.</li>
+                <li>Expiração lógica bloqueia leitura antes da limpeza física.</li>
+                <li>Falhas entre banco e storage exigem compensação ou reconciliação.</li>
+            </ul>
+            <p>Use o <a href="../reference/glossary.html">glossário</a> para revisar os termos e o <a href="../reference/waifuvault-system-map.html">mapa do sistema</a> para recuperar o contexto maior.</p>
+
+            <div class="next-step">
+                <strong>Próximo passo:</strong> a <a href="0002-entenda-um-upload-privado.html">lição 02</a> amplia a teoria sobre upload privado: fronteira de confiança, estado composto e falhas parciais.
+                <p>Se qualquer etapa estiver obscura, pergunte ao agente antes de seguir. Traga sua explicação, não apenas a letra escolhida no quiz.</p>
+            </div>
+        </section>
+    </main>
+
+    <footer class="page-footer">Lição baseada no código do WaifuVault no commit <code>5f5e94b</code>, na OWASP e na documentação oficial do Laravel 13.</footer>
+</div>
+</body>
+</html>

@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Guia visual sobre checksum e seu uso no fluxo de upload do WaifuVault.">
+    <title>Checksum: impressão digital dos bytes</title>
+    <link rel="stylesheet" href="../assets/course.css">
+</head>
+<body>
+<div class="page">
+    <header class="masthead">
+        <strong>WaifuVault → Laravel</strong>
+        <nav aria-label="Navegação do curso">
+            <a href="../index.html">Introdução</a>
+            <a href="../lessons/0001-trace-o-ciclo-de-um-arquivo.html">Lição 01</a>
+            <a href="../lessons/0002-entenda-um-upload-privado.html">Lição 02</a>
+            <a href="../lessons/0003-valide-antes-de-aceitar.html">Lição 03</a>
+            <a href="../lessons/0004-separe-identidade-e-autoridade.html">Lição 04</a>
+            <a href="#onde">Onde é feito</a>
+            <a href="#usos">Usos</a>
+            <a href="glossary.html">Glossário</a>
+        </nav>
+    </header>
+
+    <div class="hero">
+        <div>
+            <p class="eyebrow">Referência visual</p>
+            <h1>Checksum: impressão digital dos bytes</h1>
+        </div>
+        <p class="hero-note"><strong>Ideia central</strong>Os mesmos bytes produzem o mesmo resumo. Mudar até um byte normalmente produz outro resumo completamente diferente.</p>
+    </div>
+
+    <main>
+        <section>
+            <p class="kicker">Definição</p>
+            <h2>Um arquivo grande vira um valor pequeno e comparável</h2>
+            <p class="lede">Checksum é o resultado de aplicar uma função de hash aos bytes de um arquivo. A função percorre todo o conteúdo e produz um resumo de tamanho fixo.</p>
+            <p>Ele é <strong>determinístico</strong>: se a sequência de bytes for exatamente igual, o resultado será igual. Nome, pasta e data do arquivo não entram no cálculo, a menos que sejam incluídos explicitamente como bytes. Dois arquivos chamados <code>foto.png</code> podem ter checksums diferentes; dois arquivos com nomes diferentes podem ter o mesmo checksum se o conteúdo for idêntico.</p>
+
+            <pre><code>bytes:     "conteudo privado"
+MD5:       e06ecc14e49964d0a6d31dfb3da43d87
+
+bytes:     "conteudo privado!"
+MD5:       7931e1f83b02b6e2206380ed3d377f39
+                              ↑ um caractere mudou</code></pre>
+
+            <div class="callout">
+                <p><strong>Não é compressão.</strong> O checksum não permite reconstruir o arquivo. Ele funciona como uma impressão para comparação, não como uma versão reduzida do conteúdo.</p>
+            </div>
+        </section>
+
+        <section>
+            <p class="kicker">Modelo mental</p>
+            <h2>O estado do hash avança a cada chunk</h2>
+            <ol class="flow" aria-label="Cálculo incremental de um checksum">
+                <li><strong>Abrir</strong>O serviço abre um stream de leitura do arquivo.</li>
+                <li><strong>Ler</strong>O filesystem entrega uma parte dos bytes por vez.</li>
+                <li><strong>Atualizar</strong>Cada chunk modifica o estado interno do hash.</li>
+                <li><strong>Finalizar</strong>O fim do stream fecha o cálculo do resumo.</li>
+                <li><strong>Codificar</strong>O resultado binário vira texto hexadecimal.</li>
+            </ol>
+            <p>Processar por chunks evita carregar o arquivo inteiro na memória. O algoritmo mantém apenas seu estado interno enquanto todos os bytes passam por ele. Isso não reduz a quantidade total lida: para resumir o arquivo completo, todos os bytes precisam ser observados.</p>
+        </section>
+
+        <section id="onde">
+            <p class="kicker">No WaifuVault</p>
+            <h2>Primeiro grava; depois abre o arquivo novamente</h2>
+            <p>O checksum não é produzido por <code>SizeLimitDiskStorage</code> durante a chegada da requisição. Esse componente limita o tamanho e grava o stream recebido em um arquivo com nome interno. Quando ele termina, o caminho chega a <code>FileUploadService.processUpload()</code>.</p>
+
+            <ol class="flow" aria-label="Posição do checksum no fluxo do WaifuVault">
+                <li><strong>Upload</strong>O cliente transmite o corpo multipart.</li>
+                <li><strong>Gravação</strong>O Multer salva os bytes no filesystem.</li>
+                <li><strong>Releitura</strong><code>getFileHash()</code> abre o arquivo salvo.</li>
+                <li><strong>MD5</strong>O hash recebe cada chunk e gera 32 hexadecimais.</li>
+                <li><strong>Decisão</strong>Uma duplicata ativa encerra o fluxo; sem reutilização, o processamento continua.</li>
+            </ol>
+
+            <pre><code class="language-typescript">private getFileHash(resourcePath: string): Promise&lt;string&gt; {
+    return new Promise((resolve, reject) =&gt; {
+        const hashSum = crypto.createHash("md5");
+        const stream = createReadStream(resourcePath);
+        stream.on("data", (chunk: Buffer) =&gt; hashSum.update(chunk));
+        stream.on("end", () =&gt; resolve(hashSum.digest("hex")));
+        stream.on("error", reject);
+    });
+}</code></pre>
+
+            <p class="caption">Código: <a href="../source/WaifuVault/src/services/FileUploadService.ts"><code>FileUploadService.ts:331–339</code></a>. A API <code>Hash.update()</code> aceita partes sucessivas e <code>Hash.digest()</code> finaliza o resumo: <a href="https://nodejs.org/api/crypto.html#class-hash">documentação do Node.js</a>.</p>
+
+            <div class="callout warning">
+                <p><strong>Consequência operacional:</strong> o arquivo é percorrido ao menos duas vezes: uma durante a gravação do upload e outra durante o cálculo do MD5. Filtros, detecção de MIME e criptografia opcional podem provocar leituras adicionais. Seria possível calcular o hash durante a primeira passagem, mas esse não é o desenho desta versão do WaifuVault.</p>
+            </div>
+        </section>
+
+        <section id="usos">
+            <p class="kicker">Por que calcular</p>
+            <h2>O mesmo resumo participa de decisões diferentes</h2>
+            <div class="system-grid">
+                <article class="system-card">
+                    <h3>Detectar repetição</h3>
+                    <p>O repositório procura registros com o mesmo checksum. O serviço restringe a reutilização ao bucket correspondente ou, fora de buckets, ao mesmo IP.</p>
+                </article>
+                <article class="system-card">
+                    <h3>Evitar outra cópia</h3>
+                    <p>Se encontra um arquivo ativo no escopo permitido, o serviço remove o upload recém-gravado e devolve o registro existente.</p>
+                </article>
+                <article class="system-card">
+                    <h3>Persistir metadado</h3>
+                    <p>Quando o arquivo é novo, o valor entra na coluna <code>checksum</code> de <code>FileUploadModel</code>, que possui índice para consultas.</p>
+                </article>
+                <article class="system-card">
+                    <h3>Consultar reputação</h3>
+                    <p>Depois da persistência, uploads selecionados pela configuração entram em uma fila. Um worker usa o checksum para consultar um relatório já conhecido pelo VirusTotal.</p>
+                </article>
+                <article class="system-card">
+                    <h3>Comparar conteúdo</h3>
+                    <p>Em geral, recalcular e comparar hashes ajuda a detectar alteração acidental. Nesta revisão, porém, não há uma verificação na entrega.</p>
+                </article>
+                <article class="system-card">
+                    <h3>Não autorizar</h3>
+                    <p>Conhecer o checksum não concede leitura, alteração nem exclusão. Essas operações dependem de URLs, tokens e regras próprias.</p>
+                </article>
+            </div>
+            <p>A consulta de reputação depende de três configurações: chave da API, string de MIME types perigosos e limite de reputação. O upload é enfileirado depois de salvo; em execução posterior, o worker faz uma requisição <code>GET</code> usando somente o hash na URL, sem enviar novamente os bytes. Se a pontuação superar o limite, o arquivo é excluído.</p>
+            <p>Neste snapshot, a seleção usa <code>dangerousMimeTypes.includes(mediaType ?? "")</code>. Portanto, compara por substring em vez de separar uma lista de tipos exatos e também seleciona MIME desconhecido quando a configuração é uma string não vazia.</p>
+            <p class="caption">Fluxo de duplicatas: <a href="../source/WaifuVault/src/services/FileUploadService.ts"><code>FileUploadService.ts:71–80 e 187–211</code></a>. Enfileiramento: <a href="../source/WaifuVault/src/services/FileUploadService.ts"><code>FileUploadService.ts:130–136</code></a>. Consulta e exclusão: <a href="../source/WaifuVault/src/services/FileReputationService.ts"><code>FileReputationService.ts:31–59 e 71–77</code></a>.</p>
+        </section>
+
+        <section>
+            <p class="kicker">Não confunda</p>
+            <h2>Cada valor responde a uma pergunta</h2>
+            <table class="comparison">
+                <thead><tr><th>Valor</th><th>Pergunta respondida</th><th>Propriedade principal</th></tr></thead>
+                <tbody>
+                    <tr><td>Checksum</td><td>“Estes bytes parecem ser os mesmos?”</td><td>Deriva deterministicamente do conteúdo.</td></tr>
+                    <tr><td>Nome interno</td><td>“Onde o blob foi armazenado?”</td><td>É gerado pelo servidor para localização.</td></tr>
+                    <tr><td>Token</td><td>“Quem pode executar esta operação?”</td><td>Precisa ser imprevisível e tratado como capacidade.</td></tr>
+                    <tr><td>Hash de senha</td><td>“A senha apresentada confere?”</td><td>É deliberadamente caro e usa algoritmo próprio, como Argon2.</td></tr>
+                    <tr><td>Criptografia</td><td>“Como impedir a leitura sem a chave?”</td><td>Transforma os bytes e pode ser revertida com a chave correta.</td></tr>
+                </tbody>
+            </table>
+            <p>No WaifuVault, o MD5 é calculado <strong>antes</strong> da criptografia opcional por senha. Quando a criptografia está habilitada, o checksum persistido descreve os bytes recebidos antes de o arquivo ser reescrito como conteúdo cifrado.</p>
+        </section>
+
+        <section>
+            <p class="kicker">Limite de segurança</p>
+            <h2>MD5 compara rapidamente, mas colisões podem ser fabricadas</h2>
+            <p>Uma colisão acontece quando entradas diferentes produzem o mesmo resumo. Todo hash de tamanho fixo admite colisões em teoria, porque existem mais arquivos possíveis do que resumos. O problema específico do MD5 é prático: ataques conhecidos permitem construir colisões, então ele não deve sustentar assinaturas, identidade segura ou decisões adversariais que dependam de resistência a colisão.</p>
+            <p>O WaifuVault não compara os bytes depois de encontrar o mesmo MD5: dentro do escopo de deduplicação, ele considera o conteúdo repetido, apaga o upload novo e reutiliza o registro anterior. Uma colisão fabricada pode, portanto, causar uma falsa deduplicação. A consulta ao VirusTotal também recupera o relatório associado àquele MD5, não uma análise dos bytes recém-enviados.</p>
+            <p>A coluna possui índice para acelerar buscas, mas não uma restrição única. A deduplicação acontece na aplicação e não constitui, sozinha, uma garantia contra uploads concorrentes do mesmo conteúdo.</p>
+            <div class="callout warning">
+                <p><strong>Leitura correta do código:</strong> o WaifuVault usa MD5 como chave operacional para deduplicação e consulta de reputação. Isso não transforma o checksum em prova criptográfica de identidade, autenticidade ou autorização.</p>
+                <p class="caption">A <a href="https://www.rfc-editor.org/rfc/rfc6151">RFC 6151</a> afirma que MD5 não é aceitável quando resistência a colisões é necessária. Em um projeto novo, a escolha conservadora para integridade é SHA-256, mantendo tokens aleatórios separados.</p>
+            </div>
+        </section>
+
+        <section>
+            <p class="kicker">Recuperação ativa</p>
+            <h2>Teste o modelo mental</h2>
+            <div class="callout">
+                <p>Responda ao agente sem consultar o fluxo:</p>
+                <p><strong>1.</strong> Em qual momento exato o WaifuVault calcula o checksum?<br><strong>2.</strong> Por que o cálculo por stream economiza memória, mas não leitura de disco?<br><strong>3.</strong> Por que um checksum não pode substituir um token de acesso?<br><strong>4.</strong> Se o arquivo for criptografado depois, quais bytes o checksum armazenado representa?</p>
+            </div>
+            <div class="next-step">
+                <strong>Volte à <a href="../lessons/0002-entenda-um-upload-privado.html">Lição 02</a>:</strong> releia o fluxo de ingestão e localize o checksum entre a gravação do blob e a persistência dos metadados.
+                <p>Se ainda houver dúvida, pergunte ao agente usando um exemplo concreto de dois arquivos.</p>
+            </div>
+        </section>
+    </main>
+
+    <footer class="page-footer">Referência baseada no código do WaifuVault no commit <code>5f5e94b</code>, na documentação do Node.js e na RFC 6151.</footer>
+</div>
+</body>
+</html>

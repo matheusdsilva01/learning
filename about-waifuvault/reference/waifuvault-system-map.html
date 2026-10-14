@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Mapa de arquitetura do WaifuVault usado no curso.">
+    <title>Mapa do sistema WaifuVault</title>
+    <link rel="stylesheet" href="../assets/course.css">
+</head>
+<body>
+<div class="page">
+    <header class="masthead">
+        <strong>WaifuVault → Laravel</strong>
+        <nav aria-label="Navegação do curso">
+            <a href="../index.html">Introdução</a>
+            <a href="../lessons/0001-trace-o-ciclo-de-um-arquivo.html">Lição 01</a>
+            <a href="../lessons/0002-entenda-um-upload-privado.html">Lição 02</a>
+            <a href="../lessons/0003-valide-antes-de-aceitar.html">Lição 03</a>
+            <a href="../lessons/0004-separe-identidade-e-autoridade.html">Lição 04</a>
+            <a href="glossary.html">Glossário</a>
+        </nav>
+    </header>
+
+    <div class="hero">
+        <div>
+            <p class="eyebrow">Referência de arquitetura</p>
+            <h1>Mapa do WaifuVault</h1>
+        </div>
+        <p class="hero-note"><strong>Snapshot</strong>Código analisado no commit <code>5f5e94b</code>. O mapa descreve responsabilidades, não uma recomendação para copiar a arquitetura inteira.</p>
+    </div>
+
+    <main>
+        <section>
+            <h2>Topologia em execução</h2>
+            <div class="system-grid">
+                <article class="system-card"><h3>Next.js</h3><p>Landing page, uploader, acesso protegido, administração de buckets e álbuns.</p></article>
+                <article class="system-card"><h3>Ts.ED + Express</h3><p>API, ingestão, regras de negócio, entrega de arquivos e tarefas agendadas.</p></article>
+                <article class="system-card"><h3>Postgres / SQLite</h3><p>Metadados de arquivos, usuários, buckets, álbuns, bloqueios e cache de thumbnails.</p></article>
+                <article class="system-card"><h3>Filesystem</h3><p>Bytes dos uploads. Banco e disco formam um estado composto que precisa ser reconciliado.</p></article>
+                <article class="system-card"><h3>Redis</h3><p>Cache, sessões, rate limit e coordenação para componentes distribuídos.</p></article>
+                <article class="system-card"><h3>Go + ClamAV</h3><p>Microsserviços de thumbnails e ZIP, mais verificação antivírus.</p></article>
+            </div>
+            <p class="caption">Evidência de deploy: <a href="https://github.com/waifuvault/WaifuVault/blob/5f5e94b87abba950670648d962432eceec26588c/docker-compose.yml"><code>docker-compose.yml</code></a>.</p>
+        </section>
+
+        <section>
+            <h2>Espinha dorsal do arquivo</h2>
+            <ol class="flow" aria-label="Fluxo principal do arquivo">
+                <li><strong>Ingestão</strong><code>SizeLimitDiskStorage</code> grava o multipart por stream com limite de bytes.</li>
+                <li><strong>Fronteira HTTP</strong><code>FileUploadController</code> valida a combinação arquivo/URL e delega.</li>
+                <li><strong>Orquestração</strong><code>FileUploadService</code> filtra, identifica, calcula TTL e persiste.</li>
+                <li><strong>Entrega</strong><code>FileServerController</code> resolve o nome interno da URL, aplica proteção e transmite bytes.</li>
+                <li><strong>Limpeza</strong><code>FileCleaner</code> remove expirados e reconcilia banco com disco.</li>
+            </ol>
+        </section>
+
+        <section>
+            <h2>Dados centrais</h2>
+            <table class="reference-table">
+                <thead><tr><th>Campo original</th><th>Responsabilidade</th><th>Decisão para o MVP</th></tr></thead>
+                <tbody>
+                    <tr><td><code>token</code></td><td>Identidade opaca para consulta, alteração e exclusão via REST.</td><td>Mapear para <code>management_token</code>, sem colocá-lo na URL compartilhável.</td></tr>
+                    <tr><td><code>fileName</code> e extensão</td><td>Localização interna gerada pelo servidor e identificador presente na URL de entrega original.</td><td>Separar <code>public_id</code> compartilhável de <code>storage_path</code> interno.</td></tr>
+                    <tr><td><code>originalFileName</code></td><td>Nome apresentado ao usuário.</td><td>Manter separado do caminho.</td></tr>
+                    <tr><td><code>fileSize</code> e <code>mediaType</code></td><td>Metadados de validação e resposta.</td><td>Manter.</td></tr>
+                    <tr><td><code>expires</code></td><td>Instante limite de disponibilidade.</td><td>Usar <code>expires_at</code>.</td></tr>
+                    <tr><td><code>checksum</code></td><td>Detecção de conteúdo repetido.</td><td>Calcular depois do fluxo básico.</td></tr>
+                    <tr><td><code>settings</code></td><td>Senha, nome oculto e acesso único.</td><td>Adiar; evitar JSON para regras nucleares.</td></tr>
+                </tbody>
+            </table>
+            <p class="caption">Evidência: <a href="https://github.com/waifuvault/WaifuVault/blob/5f5e94b87abba950670648d962432eceec26588c/src/model/db/FileUpload.model.ts"><code>FileUpload.model.ts</code></a>.</p>
+        </section>
+
+        <section>
+            <h2>O recorte Laravel</h2>
+            <div class="callout">
+                <p><strong>Primeira arquitetura:</strong> um monolito Laravel, um banco relacional e um disco local privado. A separação por contratos do filesystem permite trocar o disco depois; microsserviços agora adicionariam operação sem provar valor.</p>
+            </div>
+            <table class="comparison">
+                <thead><tr><th>WaifuVault</th><th>Laravel MVP</th></tr></thead>
+                <tbody>
+                    <tr><td>Ts.ED controller</td><td>Controller + Form Request</td></tr>
+                    <tr><td>TypeORM model/repository</td><td>Eloquent model</td></tr>
+                    <tr><td>Filesystem direto</td><td>Disco privado via <code>Storage</code></td></tr>
+                    <tr><td><code>FileCleaner</code> com cron</td><td>Command agendado com lock</td></tr>
+                    <tr><td>Redis e serviços Go</td><td>Fora do primeiro MVP</td></tr>
+                </tbody>
+            </table>
+        </section>
+    </main>
+
+    <footer class="page-footer">Mapa derivado do código-fonte e da configuração de deploy, não apenas da página comercial.</footer>
+</div>
+</body>
+</html>

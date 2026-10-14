@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Lição conceitual sobre como um upload privado atravessa HTTP, storage e banco de dados.">
+    <title>Lição 02: entenda um upload privado</title>
+    <link rel="stylesheet" href="../assets/course.css">
+    <script src="../assets/quiz.js?v=2" defer></script>
+</head>
+<body>
+<div class="page">
+    <header class="masthead">
+        <strong>WaifuVault → Laravel</strong>
+        <nav aria-label="Navegação do curso">
+            <a href="../index.html">Introdução</a>
+            <a href="0001-trace-o-ciclo-de-um-arquivo.html">Lição 01</a>
+            <a href="0003-valide-antes-de-aceitar.html">Lição 03</a>
+            <a href="#fronteira">Fronteira</a>
+            <a href="#estados">Estados</a>
+            <a href="#revisao">Revisão</a>
+            <a href="../reference/checksum.html">Checksum</a>
+            <a href="../reference/glossary.html">Glossário</a>
+        </nav>
+    </header>
+
+    <div class="hero">
+        <div>
+            <p class="eyebrow">Lição 02 · 18 minutos</p>
+            <h1>Entenda um upload privado</h1>
+        </div>
+        <p class="hero-note"><strong>Vitória concreta</strong>Ao final, você conseguirá distinguir o que chega do cliente, o que o servidor decide e quais estados precisam existir para o upload ser considerado aceito.</p>
+    </div>
+
+    <main>
+        <section>
+            <p class="kicker">Introdução</p>
+            <h2>Receber bytes ainda não significa aceitar um arquivo</h2>
+            <p class="lede">Upload é a travessia de dados não confiáveis para dentro do sistema. A requisição pode terminar com bytes no disco antes que as regras de negócio decidam se eles devem permanecer ali.</p>
+            <p>Em uma requisição multipart, o cliente envia conteúdo binário junto de campos e metadados. Algum componente precisa consumir esse fluxo, controlar seu tamanho e escolher um destino. Só depois outras camadas conseguem detectar o tipo real, calcular propriedades e registrar o arquivo.</p>
+            <div class="callout warning">
+                <p><strong>Distinção central:</strong> “o servidor recebeu os bytes” descreve transporte. “o sistema aceitou o arquivo” descreve uma decisão de negócio concluída.</p>
+            </div>
+        </section>
+
+        <section id="fronteira">
+            <p class="kicker">Fronteira de confiança</p>
+            <h2>O cliente descreve; o servidor decide</h2>
+            <table class="reference-table">
+                <thead><tr><th>Dado</th><th>Origem</th><th>Tratamento</th></tr></thead>
+                <tbody>
+                    <tr><td>Nome original</td><td>Cliente</td><td>Preservar apenas para apresentação; nunca usá-lo diretamente como caminho.</td></tr>
+                    <tr><td><code>Content-Type</code></td><td>Cliente</td><td>Tratar como alegação e detectar o MIME a partir do conteúdo no servidor.</td></tr>
+                    <tr><td><code>Content-Length</code></td><td>Cliente</td><td>Usar como sinal antecipado, mas contar os bytes reais durante a recepção.</td></tr>
+                    <tr><td>Caminho interno</td><td>Servidor</td><td>Gerar sem usar diretamente nomes ou diretórios fornecidos pelo cliente; no original, o UUID ainda preserva a extensão declarada.</td></tr>
+                    <tr><td>Identificadores de acesso</td><td>Servidor</td><td>Gerar valores opacos e imprevisíveis com finalidades bem definidas.</td></tr>
+                    <tr><td>Expiração</td><td>Regra do serviço</td><td>Calcular e persistir como instante absoluto para decisões posteriores.</td></tr>
+                </tbody>
+            </table>
+            <p>A OWASP recomenda renomear arquivos, limitar tamanho e tipo, armazená-los fora do webroot e servi-los por uma camada controlada da aplicação. Essas medidas não são independentes: juntas, elas evitam que dados fornecidos pelo cliente se transformem diretamente em estrutura pública do servidor.</p>
+            <p class="caption">Fonte recomendada: <a href="https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html">OWASP File Upload Cheat Sheet</a>.</p>
+        </section>
+
+        <section>
+            <p class="kicker">No código original</p>
+            <h2>O WaifuVault separa ingestão de aceitação</h2>
+            <p>Em <a href="../source/WaifuVault/src/config/multer/SizeLimitDiskStorage.ts"><code>SizeLimitDiskStorage.ts</code></a>, o adaptador do Multer gera um UUID para o nome físico e transmite os chunks para o filesystem. Quando existe um limite, ele soma o tamanho recebido para interromper excessos; o serviço obtém o tamanho final do arquivo posteriormente. Se o limite for excedido ou o stream falhar, encerra a escrita e remove o arquivo parcial.</p>
+            <p>Quando o controller recebe o objeto do upload, portanto, os bytes já podem existir. O serviço primeiro calcula o <a href="../reference/checksum.html">checksum</a> e procura uma duplicata. Se nenhum registro ativo for reutilizado no escopo permitido, aplica filtros, detecta o MIME, mede o arquivo, define opções e expiração, processa criptografia opcional e finalmente persiste <a href="../source/WaifuVault/src/model/db/FileUpload.model.ts"><code>FileUpload.model.ts</code></a>.</p>
+            <ol class="flow" aria-label="Etapas de um upload privado">
+                <li><strong>Transmitir</strong>O parser lê os chunks enviados pelo cliente.</li>
+                <li><strong>Conter</strong>Um limite interrompe uploads grandes e remove parciais.</li>
+                <li><strong>Identificar</strong>O servidor mede, detecta e nomeia o conteúdo.</li>
+                <li><strong>Registrar</strong>O banco passa a saber localizar e governar o blob.</li>
+                <li><strong>Responder</strong>O cliente recebe referências, nunca o caminho físico.</li>
+            </ol>
+        </section>
+
+        <section id="estados">
+            <p class="kicker">Estado composto</p>
+            <h2>Blob e metadados cumprem papéis diferentes</h2>
+            <p>O filesystem é adequado para guardar a sequência de bytes. O banco é adequado para consultar identidade, tamanho, tipo, políticas e prazos. Um registro não substitui o blob; o blob isolado também não diz ao sistema como deve ser tratado.</p>
+            <table class="comparison">
+                <thead><tr><th>Categoria</th><th>Exemplos</th><th>Por que existe</th></tr></thead>
+                <tbody>
+                    <tr><td>Localização</td><td>Caminho interno gerado</td><td>Permite encontrar o blob sem confiar no nome do cliente.</td></tr>
+                    <tr><td>Apresentação</td><td>Nome original, extensão</td><td>Preserva contexto para respostas e downloads.</td></tr>
+                    <tr><td>Descrição técnica</td><td>Tamanho, MIME, checksum</td><td>Suporta validação, integridade e decisões de entrega.</td></tr>
+                    <tr><td>Identidade e acesso</td><td>Token, identificador público</td><td>Localiza o recurso e delimita quais operações são permitidas.</td></tr>
+                    <tr><td>Ciclo de vida</td><td>Criação, expiração, exclusão</td><td>Define quando o conteúdo pode existir e ser servido.</td></tr>
+                </tbody>
+            </table>
+            <div class="callout">
+                <p><strong>Privado não significa inacessível.</strong> Significa que o servidor web não publica diretamente o diretório. Uma requisição passa pela aplicação, que localiza o registro, verifica políticas e então transmite os bytes.</p>
+            </div>
+        </section>
+
+        <section>
+            <p class="kicker">Falhas possíveis</p>
+            <h2>O upload atravessa uma fronteira sem transação única</h2>
+            <table class="reference-table">
+                <thead><tr><th>Momento da falha</th><th>Estado resultante</th><th>Resposta necessária</th></tr></thead>
+                <tbody>
+                    <tr><td>Antes de gravar</td><td>Sem blob e sem registro</td><td>Rejeitar a requisição sem criar estado permanente.</td></tr>
+                    <tr><td>Durante o stream</td><td>Possível arquivo parcial</td><td>Interromper a escrita e remover o parcial.</td></tr>
+                    <tr><td>Após o blob, antes do registro</td><td>Blob órfão</td><td>Compensar removendo o blob e preservar o erro original.</td></tr>
+                    <tr><td>Após o registro, com blob ausente</td><td>Registro órfão</td><td>Negar entrega e reconciliar banco e storage.</td></tr>
+                </tbody>
+            </table>
+            <p>Uma transação SQL só governa alterações no banco. Ela não desfaz automaticamente uma escrita no filesystem. Por isso, o desenho combina prevenção, compensação imediata e reconciliação posterior.</p>
+        </section>
+
+        <section id="revisao">
+            <p class="kicker">Recuperação ativa</p>
+            <h2>Localize a decisão do servidor</h2>
+            <div class="quiz"
+                 data-quiz
+                 data-correct-feedback="Correto. O nome original continua útil como metadado, mas não controla a localização física."
+                 data-incorrect-feedback="Ainda não. Separe o dado apresentado ao usuário da decisão que define onde os bytes serão gravados.">
+                <h3>Um cliente envia um arquivo chamado relatorio.pdf. Qual tratamento preserva o nome sem entregar o controle do caminho ao cliente?</h3>
+                <div class="quiz-options">
+                    <button type="button" data-answer data-feedback="Isso permite colisões e faz um dado externo controlar o filesystem." aria-pressed="false">Usar relatorio.pdf diretamente como o caminho físico do arquivo</button>
+                    <button type="button" data-answer data-correct="true" aria-pressed="false">Gerar caminho interno e preservar relatorio.pdf apenas como metadado</button>
+                    <button type="button" data-answer data-feedback="Um hash pode identificar conteúdo, mas não elimina a necessidade de preservar metadados de apresentação." aria-pressed="false">Descartar relatorio.pdf e usar somente o checksum como identidade</button>
+                    <button type="button" data-answer data-feedback="Sanitização reduz alguns riscos, mas ainda deixa o cliente definir identidade e localização." aria-pressed="false">Sanitizar relatorio.pdf e usá-lo diretamente como o identificador interno</button>
+                </div>
+                <p class="quiz-feedback" data-feedback aria-live="polite">Escolha uma alternativa para receber feedback.</p>
+            </div>
+
+            <div class="callout">
+                <h3>Explique sem consultar a tabela</h3>
+                <p>Responda ao agente:</p>
+                <p><strong>1.</strong> Por que um upload pode deixar bytes no disco mesmo quando a requisição falha?<br><strong>2.</strong> Qual é a diferença entre nome original e caminho interno?<br><strong>3.</strong> O que torna um storage privado se o arquivo ainda pode ser baixado?</p>
+            </div>
+        </section>
+
+        <section>
+            <p class="kicker">Resumo de bolso</p>
+            <h2>O que precisa permanecer</h2>
+            <ul class="checklist">
+                <li>Dados enviados pelo cliente atravessam uma fronteira de confiança.</li>
+                <li>Recepção dos bytes acontece antes da aceitação completa pelo negócio.</li>
+                <li>Nome original é apresentação; caminho interno é decisão do servidor.</li>
+                <li>Blob e registro formam um estado composto entre filesystem e banco.</li>
+                <li>Storage privado exige entrega mediada pela aplicação.</li>
+                <li>Falhas parciais exigem limpeza imediata ou reconciliação posterior.</li>
+            </ul>
+            <p>Consulte o <a href="../reference/glossary.html">glossário</a> para revisar blob, metadados, capacidade, órfão e webroot.</p>
+            <div class="next-step">
+                <strong>Próximo tópico teórico:</strong> a <a href="0003-valide-antes-de-aceitar.html">Lição 03</a> trata de limites e validação de conteúdo, incluindo tamanho real, MIME detectado e tipos perigosos.
+                <p>Antes de seguir, envie ao agente suas respostas da revisão. Dúvidas conceituais devem ser resolvidas antes da etapa prática.</p>
+            </div>
+        </section>
+    </main>
+
+    <footer class="page-footer">Lição baseada em <code>SizeLimitDiskStorage.ts</code>, <code>FileUpload.model.ts</code>, OWASP e no código do WaifuVault no commit <code>5f5e94b</code>.</footer>
+</div>
+</body>
+</html>

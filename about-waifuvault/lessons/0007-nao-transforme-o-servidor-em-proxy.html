@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Lição teórica sobre upload por URL, SSRF, redirecionamentos, DNS e controles de saída no WaifuVault.">
+    <title>Lição 07: não transforme o servidor em proxy</title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="../assets/course.css">
+    <script src="../assets/quiz.js?v=2" defer></script>
+</head>
+<body>
+<div class="page">
+    <header class="masthead">
+        <strong>WaifuVault → Laravel</strong>
+        <nav aria-label="Navegação do curso">
+            <a href="../index.html">Introdução</a>
+            <a href="0006-faca-o-estado-convergir.html">Lição 06</a>
+            <a href="#fluxo">Fluxo</a>
+            <a href="#ssrf">SSRF</a>
+            <a href="#saltos">Saltos</a>
+            <a href="#controles">Controles</a>
+            <a href="#revisao">Revisão</a>
+            <a href="../reference/glossary.html">Glossário</a>
+        </nav>
+    </header>
+
+    <div class="hero">
+        <div>
+            <p class="eyebrow">Lição 07 · 25 minutos</p>
+            <h1>Não transforme o servidor em proxy</h1>
+        </div>
+        <p class="hero-note"><strong>Vitória concreta</strong>Ao final, você conseguirá seguir cada salto de uma URL remota e identificar onde o destino precisa ser validado para impedir SSRF.</p>
+    </div>
+
+    <main>
+        <section>
+            <p class="kicker">Mudança de fronteira</p>
+            <h2>Upload por URL não traz bytes do navegador</h2>
+            <p class="lede">No upload multipart, o cliente conecta-se à aplicação e envia bytes. No upload por URL, o cliente fornece um endereço e convence a própria aplicação a iniciar outra conexão.</p>
+            <table class="comparison">
+                <thead><tr><th>Entrada</th><th>Quem busca os bytes?</th><th>Rede alcançável</th></tr></thead>
+                <tbody>
+                    <tr><td>Arquivo multipart</td><td>O cliente envia bytes pela conexão já aceita.</td><td>A rede entre cliente e aplicação.</td></tr>
+                    <tr><td>URL remota</td><td>O servidor resolve o nome e abre uma nova conexão.</td><td>A rede vista pelo servidor, possivelmente mais privilegiada.</td></tr>
+                </tbody>
+            </table>
+            <div class="callout warning">
+                <p><strong>A URL vira uma instrução de rede.</strong> O atacante não precisa alcançar diretamente um serviço interno se conseguir fazer o backend requisitá-lo em seu lugar.</p>
+            </div>
+        </section>
+
+        <section id="fluxo">
+            <p class="kicker">No código original</p>
+            <h2>O backend executa duas requisições</h2>
+            <ol class="flow" aria-label="Fluxo de upload por URL no WaifuVault">
+                <li><strong>Receber</strong>O controller aceita <code>url</code> no corpo.</li>
+                <li><strong>Classificar</strong>Uma string segue para <code>FileUrlService</code>.</li>
+                <li><strong>Verificar</strong>O hostname inicial é testado contra endereços locais.</li>
+                <li><strong>Medir</strong>Um <code>HEAD</code> exige <code>Content-Length</code>.</li>
+                <li><strong>Buscar</strong>Um <code>GET</code> lê os bytes e grava o arquivo.</li>
+            </ol>
+            <p><a href="../source/WaifuVault/src/controllers/rest/impl/FileUploadController.ts"><code>FileUploadController</code></a> exige arquivo ou URL, mas não ambos, e envia a origem para <code>processUpload()</code>. Quando a origem é string, <a href="../source/WaifuVault/src/services/FileUrlService.ts"><code>FileUrlService.getFile()</code></a> assume a busca remota.</p>
+            <p>O recurso pode ser desativado configurando um comprimento máximo de URL não positivo. Quando ativo, o serviço limita o texto da URL, consulta o hostname, executa <code>HEAD</code>, compara o tamanho anunciado, executa <code>GET</code> e aborta se os bytes recebidos ultrapassarem o limite.</p>
+            <div class="callout">
+                <p><strong>Controles diferentes:</strong> comprimento da URL e tamanho do corpo limitam recursos consumidos. Eles não determinam se o destino de rede é autorizado.</p>
+            </div>
+        </section>
+
+        <section id="ssrf">
+            <p class="kicker">A ameaça</p>
+            <h2>SSRF explora a posição de rede do servidor</h2>
+            <p><strong>Server-Side Request Forgery</strong> ocorre quando uma entrada controlada pelo usuário influencia uma requisição iniciada pelo servidor e permite alcançar um destino que não deveria estar disponível por esse fluxo.</p>
+            <div class="system-grid">
+                <article class="system-card">
+                    <h3>Serviços internos</h3>
+                    <p>Painéis, bancos HTTP, sidecars e APIs acessíveis apenas pela rede privada.</p>
+                </article>
+                <article class="system-card">
+                    <h3>Metadados de nuvem</h3>
+                    <p>Endpoints link-local podem expor identidade e credenciais da carga de trabalho.</p>
+                </article>
+                <article class="system-card">
+                    <h3>Portas inesperadas</h3>
+                    <p>Respostas e tempos podem transformar o backend em instrumento de enumeração.</p>
+                </article>
+            </div>
+            <p>O impacto não depende de devolver a resposta bruta imediatamente. No WaifuVault, uma resposta <code>GET</code> bem-sucedida pode virar um arquivo hospedado; uma resposta não bem-sucedida tem o corpo lido, registrado e propagado em uma exceção HTTP. Em ambos os casos, alcançar o destino já rompe a fronteira esperada.</p>
+            <p class="caption">Fonte recomendada: <a href="https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html">OWASP SSRF Prevention Cheat Sheet</a>.</p>
+        </section>
+
+        <section id="saltos">
+            <p class="kicker">O destino pode mudar</p>
+            <h2>Validar a primeira URL não valida a conexão final</h2>
+            <h3>Redirecionamento</h3>
+            <pre><code>URL inicial pública
+    └── 302 Location: http://127.0.0.1:3000/admin
+            └── cliente HTTP segue e conecta ao destino interno</code></pre>
+            <p>No snapshot, o hostname inicial passa por <code>isLocalhost()</code>, mas os dois <code>fetch()</code> não desabilitam redirecionamentos. Como o comportamento padrão é segui-los, um novo <code>Location</code> pode trocar host, porta e esquema sem repetir a validação da aplicação.</p>
+            <h3>Resolução DNS</h3>
+            <pre><code>validação: arquivos.exemplo → IP público
+conexão:   arquivos.exemplo → IP privado</code></pre>
+            <p>A dependência resolve o hostname durante a verificação. Depois, <code>fetch()</code> realiza sua própria resolução para conectar. Se as respostas mudarem entre esses momentos, a aplicação validou um endereço e utilizou outro. Essa separação entre verificar e usar é uma forma de <em>time-of-check to time-of-use</em>.</p>
+            <div class="callout warning">
+                <p><strong>Regra operacional:</strong> valide cada salto e garanta que o endereço aprovado seja o endereço efetivamente usado na conexão. Conferir apenas a grafia do hostname não estabelece essa ligação.</p>
+            </div>
+        </section>
+
+        <section id="controles">
+            <p class="kicker">Defesa em profundidade</p>
+            <h2>O destino precisa permanecer público até a conexão</h2>
+            <table class="reference-table">
+                <thead><tr><th>Camada</th><th>Decisão</th><th>Limitação coberta</th></tr></thead>
+                <tbody>
+                    <tr><td>Funcionalidade</td><td>Não oferecer busca remota quando ela não é requisito.</td><td>Remove toda a superfície de SSRF desse fluxo.</td></tr>
+                    <tr><td>Parser</td><td>Aceitar explicitamente somente <code>http</code> e <code>https</code>; rejeitar credenciais e portas não necessárias.</td><td>Reduz esquemas e destinos inesperados.</td></tr>
+                    <tr><td>DNS e IP</td><td>Resolver todos os endereços IPv4 e IPv6 e rejeitar qualquer faixa não pública.</td><td>Bloqueia loopback, privadas, link-local e outras faixas reservadas.</td></tr>
+                    <tr><td>Conexão</td><td>Vincular o endereço validado à conexão efetiva, preservando hostname para HTTP e TLS.</td><td>Reduz troca de resposta DNS entre verificação e uso.</td></tr>
+                    <tr><td>Redirect</td><td>Desabilitar seguimento automático; validar cada <code>Location</code> antes do próximo salto.</td><td>Impede que uma URL pública redirecione silenciosamente para rede interna.</td></tr>
+                    <tr><td>Egress</td><td>Aplicar firewall ou proxy de saída que negue redes internas e metadata.</td><td>Continua protegendo quando a validação da aplicação falha.</td></tr>
+                    <tr><td>Recursos</td><td>Limitar tempo, bytes, redirecionamentos e concorrência.</td><td>Contém indisponibilidade, mas não substitui autorização do destino.</td></tr>
+                </tbody>
+            </table>
+            <p>Se os destinos legítimos forem conhecidos, uma allowlist estrita é preferível. Um host de arquivos genérico, porém, pretende alcançar muitos domínios externos; nesse caso, negar endereços não públicos é necessário, mas a OWASP ressalta que blocklists de aplicação não formam uma barreira perfeita. Controle de egress continua necessário.</p>
+            <h3>Decisão para o primeiro MVP</h3>
+            <p>Upload por URL não é necessário para cumprir a missão inicial de upload privado, TTL, leitura e exclusão. O MVP Laravel aceitará bytes enviados pelo cliente e deixará a busca remota fora do escopo. Isso é redução deliberada de superfície, não uma implementação incompleta de SSRF.</p>
+        </section>
+
+        <section id="revisao">
+            <p class="kicker">Recuperação ativa</p>
+            <h2>Revalide o destino de cada salto</h2>
+            <div class="quiz"
+                 data-quiz
+                 data-correct-feedback="Correto. Cada redirecionamento é uma nova instrução de rede e precisa passar pelos mesmos controles antes da conexão."
+                 data-incorrect-feedback="Ainda não. Um controle de tamanho ou uma validação anterior não autoriza o novo destino produzido pelo redirecionamento.">
+                <h3>Uma URL pública responde com redirecionamento para um endereço privado. Qual política preserva a fronteira de rede?</h3>
+                <div class="quiz-options">
+                    <button type="button" data-answer data-correct="true" aria-pressed="false">Desabilitar redirecionamentos automáticos e validar cada destino antes de conectar</button>
+                    <button type="button" data-answer data-feedback="A URL inicial não autoriza os destinos encontrados depois dela." aria-pressed="false">Validar somente o primeiro hostname e seguir automaticamente redirecionamentos recebidos</button>
+                    <button type="button" data-answer data-feedback="DNS pode produzir endereços privados mesmo quando o hostname parece externo." aria-pressed="false">Bloquear apenas localhost textual e permitir endereços resolvidos pelo DNS</button>
+                    <button type="button" data-answer data-feedback="HEAD também é uma requisição do servidor e pode atingir o destino proibido." aria-pressed="false">Executar HEAD primeiro e considerar seguro qualquer GET posterior automaticamente</button>
+                </div>
+                <p class="quiz-feedback" data-feedback aria-live="polite">Escolha uma alternativa para receber feedback.</p>
+            </div>
+
+            <div class="callout">
+                <h3>Explique sem consultar a lição</h3>
+                <p>Responda ao agente:</p>
+                <p><strong>1.</strong> Por que upload por URL concede ao usuário influência sobre uma conexão mais privilegiada?<br><strong>2.</strong> Como um redirecionamento contorna uma validação aplicada somente à URL inicial?<br><strong>3.</strong> Qual diferença entre validar o IP resolvido e garantir que a conexão use esse IP?<br><strong>4.</strong> Por que <code>Content-Length</code>, timeout e limite de bytes não impedem SSRF?<br><strong>5.</strong> Por que excluir upload por URL é uma decisão de segurança válida para o primeiro MVP?</p>
+            </div>
+        </section>
+
+        <section>
+            <p class="kicker">Resumo de bolso</p>
+            <h2>O que precisa permanecer</h2>
+            <ul class="checklist">
+                <li>Upload por URL faz o servidor atuar como cliente de rede.</li>
+                <li>SSRF explora a posição e as permissões de rede do backend.</li>
+                <li>Uma URL validada não autoriza automaticamente seus redirecionamentos.</li>
+                <li>Validação DNS precisa permanecer ligada ao endereço realmente conectado.</li>
+                <li>Limites de recursos não substituem autorização de destino.</li>
+                <li>Firewall ou proxy de egress adiciona uma fronteira independente.</li>
+                <li>Remover uma funcionalidade desnecessária pode ser o controle mais confiável.</li>
+            </ul>
+            <div class="next-step">
+                <strong>Antes de seguir:</strong> envie ao agente suas respostas da revisão. A próxima lição será escolhida somente após demonstrar a diferença entre validar uma URL e controlar a conexão resultante.
+                <p>Se redirecionamento, DNS ou egress ainda estiverem obscuros, pergunte ao agente antes de responder.</p>
+            </div>
+        </section>
+    </main>
+
+    <footer class="page-footer">Lição baseada em <code>FileUploadController</code>, <code>FileUploadService</code> e <code>FileUrlService</code> no commit <code>5f5e94b</code>, com referência à OWASP SSRF Prevention Cheat Sheet.</footer>
+</div>
+</body>
+</html>
